@@ -1,0 +1,301 @@
+# Home Server — First Setup Guide
+
+## Prerequisites
+
+- NixOS live USB booted on the server
+- 4 storage drives + 1 boot SSD installed
+- Raspberry Pi accessible over SSH (for backups)
+- A [Tailscale account](https://login.tailscale.com)
+
+---
+
+## 1. Install NixOS
+
+### 1.1 Partition and create RAID
+
+From the live installer, confirm your drive layout:
+
+```bash
+lsblk
+```
+
+Edit `raid-setup.sh` if your device names differ from `/dev/sda–sde`, then run:
+
+```bash
+bash raid-setup.sh
+```
+
+### 1.2 Mount and install
+
+```bash
+mount /dev/disk/by-label/nixos-root /mnt
+mkdir -p /mnt/boot
+mount /dev/disk/by-label/nixos-boot /mnt/boot
+mkdir -p /mnt/mnt/data
+mount /dev/disk/by-label/data /mnt/mnt/data
+swapon /dev/disk/by-label/nixos-swap
+```
+
+Generate the hardware config and copy your configuration:
+
+```bash
+nixos-generate-config --root /mnt
+# Replace the generated configuration.nix with yours:
+cp configuration.nix /mnt/etc/nixos/configuration.nix
+```
+
+Install and reboot:
+
+```bash
+nixos-install
+reboot
+```
+
+### 1.3 First boot
+
+```bash
+# Set your password
+passwd stef
+
+# Verify RAID is healthy
+cat /proc/mdstat
+```
+
+---
+
+## 2. Create data directories
+
+```bash
+sudo mkdir -p /mnt/data/{seafile,backups}
+sudo chown stef:users /mnt/data/{seafile,backups}
+```
+
+---
+
+## 3. Set up Tailscale
+
+```bash
+sudo tailscale up
+```
+
+Follow the link to authenticate. Your server will be accessible at
+`homeserver.<your-tailnet>.ts.net` from any device with Tailscale installed.
+
+To use Tailscale MagicDNS as your domain, update `DOMAIN` in `.env`
+(see step 5).
+
+---
+
+## 4. Clone the repo
+
+```bash
+cd /home/stef
+git clone <your-repo-url> server_config
+cd server_config
+```
+
+---
+
+## 5. Configure environment
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and fill in all values:
+
+| Variable | What to set |
+|---|---|
+| `DOMAIN` | Your tailnet hostname (e.g. `homeserver.tail1234.ts.net`) or `homeserver.local` for LAN-only |
+| `SEAFILE_MYSQL_ROOT_PASSWORD` | Strong random password |
+| `SEAFILE_MYSQL_DB_PASSWORD` | Strong random password (Seafile DB user) |
+| `SEAFILE_ADMIN_EMAIL` | Your admin email |
+| `SEAFILE_ADMIN_PASSWORD` | Your Seafile admin password |
+| `SEAFILE_REDIS_PASSWORD` | Strong random password |
+| `JWT_PRIVATE_KEY` | Generate with `pwgen -s 40 1` (min 32 chars) |
+| `VAULTWARDEN_ADMIN_TOKEN` | Generate with `openssl rand -hex 32` |
+| `JOPLIN_DB_PASSWORD` | Strong random password |
+
+Generate passwords quickly:
+
+```bash
+openssl rand -hex 16
+```
+
+---
+
+## 6. Create the Docker network
+
+All services share a single network for Caddy to reach them:
+
+```bash
+docker network create proxy
+```
+
+---
+
+## 7. Deploy services
+
+Start Caddy first, then the rest in any order:
+
+```bash
+cd ~/server_config
+
+# Reverse proxy (must be first)
+docker compose --env-file .env -f compose/caddy.yml up -d
+
+# Core services
+docker compose --env-file .env -f compose/seafile.yml up -d
+docker compose --env-file .env -f compose/vaultwarden.yml up -d
+docker compose --env-file .env -f compose/joplin.yml up -d
+docker compose --env-file .env -f compose/portainer.yml up -d
+
+# Update monitoring
+docker compose --env-file .env -f compose/wud.yml up -d
+```
+
+---
+
+## 8. Verify services
+
+Open these URLs (replace `DOMAIN` with your value from `.env`):
+
+| Service | URL |
+|---|---|
+| Seafile | `https://seafile.DOMAIN` |
+| Vaultwarden | `https://vaultwarden.DOMAIN` |
+| Joplin | `https://joplin.DOMAIN` |
+| Portainer | `https://portainer.DOMAIN` |
+| WUD | `https://wud.DOMAIN` |
+
+If using `homeserver.local`, your browser will warn about Caddy's
+internal CA certificate on first visit — this is expected. Accept
+the certificate to proceed.
+
+---
+
+## 9. Set up backups
+
+### 9.1 Prepare the Raspberry Pi
+
+On the Pi, create the backup directory and ensure SSH key access:
+
+```bash
+# On the Pi
+mkdir -p /backups/homeserver
+
+# On the server — generate a key if you don't have one
+ssh-keygen -t ed25519
+ssh-copy-id pi@<pi-ip-address>
+```
+
+### 9.2 Configure Restic credentials
+
+```bash
+mkdir -p ~/.config/restic
+cp backup/restic-env.example ~/.config/restic/env
+```
+
+Edit `~/.config/restic/env`:
+
+```
+RESTIC_REPOSITORY=sftp:pi@192.168.1.50:/backups/homeserver
+RESTIC_PASSWORD=<strong-password-keep-this-safe>
+```
+
+Save the `RESTIC_PASSWORD` somewhere safe (e.g. in Vaultwarden).
+You need it to restore backups.
+
+### 9.3 Initialize and test
+
+```bash
+source ~/.config/restic/env
+restic init
+bash ~/server_config/backup/restic-backup.sh
+```
+
+### 9.4 Enable the daily timer
+
+```bash
+sudo cp ~/server_config/backup/restic-backup.service /etc/systemd/system/
+sudo cp ~/server_config/backup/restic-backup.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now restic-backup.timer
+
+# Verify it's scheduled
+systemctl list-timers restic-backup.timer
+```
+
+---
+
+## 10. Connect your devices
+
+### Seafile desktop sync
+
+1. Install the [Seafile desktop client](https://www.seafile.com/en/download/)
+2. Server URL: `https://seafile.DOMAIN`
+3. Log in with your admin credentials
+4. Choose libraries to sync
+
+### Vaultwarden
+
+1. Install Bitwarden on your devices
+2. Before logging in, tap the gear icon and set the server URL to
+   `https://vaultwarden.DOMAIN`
+3. Create an account or log in
+
+### Joplin
+
+1. In Joplin, go to Settings > Synchronisation
+2. Set target to "Joplin Server"
+3. Server URL: `https://joplin.DOMAIN`
+4. Default admin login: `admin@localhost` / `admin` (change immediately)
+
+### Seafile server-only files
+
+Files uploaded via the web UI are stored on the server without
+syncing to your desktop. Create a library and don't sync it to
+any client — use this for large archives, media, or anything
+you don't need locally.
+
+---
+
+## 11. Updates
+
+### How updates work
+
+- **Docker containers:** WUD (What's Up Docker) monitors all containers and
+  shows available updates in its dashboard at `https://wud.DOMAIN`. It does
+  not auto-update — you decide when to pull new images.
+- **NixOS:** Auto-upgrades run daily at 04:30, but only after a successful
+  Restic backup. If the backup fails, the upgrade is skipped.
+- **Major versions:** All images are pinned to their current major version
+  (e.g. `joplin/server:3`). Patch updates are safe to pull. Major version
+  bumps (e.g. 3 -> 4) require changing the tag in the compose file after
+  checking release notes.
+
+### Daily schedule
+
+```text
+03:00  Restic backup
+04:30  NixOS upgrade (only if backup succeeded)
+```
+
+### Manually updating a container
+
+After WUD shows an update is available:
+
+```bash
+cd ~/server_config
+docker compose --env-file .env -f compose/<service>.yml pull
+docker compose --env-file .env -f compose/<service>.yml up -d
+```
+
+### Rolling back NixOS
+
+If an upgrade causes issues, boot into a previous generation from the
+bootloader, or run:
+
+```bash
+sudo nixos-rebuild switch --rollback
+```

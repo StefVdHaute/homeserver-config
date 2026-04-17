@@ -1,0 +1,83 @@
+services:
+  seafile-db:
+    image: mariadb:10.11
+    container_name: seafile-db
+    restart: unless-stopped
+    environment:
+      - MYSQL_ROOT_PASSWORD=${SEAFILE_MYSQL_ROOT_PASSWORD}
+      - MYSQL_LOG_CONSOLE=true
+      - MARIADB_AUTO_UPGRADE=1
+    volumes:
+      - seafile_db:/var/lib/mysql
+    networks:
+      - seafile-backend
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "/usr/local/bin/healthcheck.sh",
+          "--connect",
+          "--mariadbupgrade",
+          "--innodb_initialized",
+        ]
+      interval: 20s
+      start_period: 30s
+      timeout: 5s
+      retries: 10
+
+  seafile-redis:
+    image: redis:7-alpine
+    container_name: seafile-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${SEAFILE_REDIS_PASSWORD}
+    networks:
+      - seafile-backend
+
+  seafile:
+    image: seafileltd/seafile-mc:13.0-latest
+    container_name: seafile
+    restart: unless-stopped
+    volumes:
+      - /mnt/data/seafile:/shared
+    environment:
+      - SEAFILE_MYSQL_DB_HOST=seafile-db
+      - SEAFILE_MYSQL_DB_PORT=3306
+      - SEAFILE_MYSQL_DB_USER=seafile
+      - SEAFILE_MYSQL_DB_PASSWORD=${SEAFILE_MYSQL_DB_PASSWORD}
+      - INIT_SEAFILE_MYSQL_ROOT_PASSWORD=${SEAFILE_MYSQL_ROOT_PASSWORD}
+      - SEAFILE_MYSQL_DB_CCNET_DB_NAME=ccnet_db
+      - SEAFILE_MYSQL_DB_SEAFILE_DB_NAME=seafile_db
+      - SEAFILE_MYSQL_DB_SEAHUB_DB_NAME=seahub_db
+      - TIME_ZONE=${TZ}
+      - INIT_SEAFILE_ADMIN_EMAIL=${SEAFILE_ADMIN_EMAIL}
+      - INIT_SEAFILE_ADMIN_PASSWORD=${SEAFILE_ADMIN_PASSWORD}
+      - SEAFILE_SERVER_HOSTNAME=seafile.${DOMAIN}
+      - SEAFILE_SERVER_PROTOCOL=https
+      - JWT_PRIVATE_KEY=${JWT_PRIVATE_KEY}
+      - ENABLE_GO_FILESERVER=true
+      - CACHE_PROVIDER=redis
+      - REDIS_HOST=seafile-redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${SEAFILE_REDIS_PASSWORD}
+    networks:
+      - proxy
+      - seafile-backend
+    depends_on:
+      seafile-db:
+        condition: service_healthy
+      seafile-redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:80 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  seafile_db:
+
+networks:
+  proxy:
+    external: true
+  seafile-backend:

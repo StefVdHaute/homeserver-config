@@ -1,0 +1,47 @@
+services:
+  joplin-db:
+    image: postgres:16-alpine
+    container_name: joplin-db
+    restart: unless-stopped
+    volumes:
+      - joplin_db:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=${JOPLIN_DB_NAME}
+      - POSTGRES_USER=${JOPLIN_DB_USER}
+      - POSTGRES_PASSWORD=${JOPLIN_DB_PASSWORD}
+    networks:
+      - joplin-backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${JOPLIN_DB_USER} -d ${JOPLIN_DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  joplin:
+    image: joplin/server:3
+    container_name: joplin
+    restart: unless-stopped
+    environment:
+      - APP_BASE_URL=https://joplin.${DOMAIN}
+      - APP_PORT=22300
+      - DB_CLIENT=pg
+      - POSTGRES_HOST=joplin-db
+      - POSTGRES_PORT=5432
+      - POSTGRES_DATABASE=${JOPLIN_DB_NAME}
+      - POSTGRES_USER=${JOPLIN_DB_USER}
+      - POSTGRES_PASSWORD=${JOPLIN_DB_PASSWORD}
+      - TZ=${TZ}
+    networks:
+      - proxy
+      - joplin-backend
+    depends_on:
+      joplin-db:
+        condition: service_healthy
+
+volumes:
+  joplin_db:
+
+networks:
+  proxy:
+    external: true
+  joplin-backend:

@@ -1,0 +1,40 @@
+# =============================================================
+# Caddy Reverse Proxy Configuration
+#
+# Uses {$DOMAIN} from the environment. For LAN-only access,
+# set DOMAIN to e.g. "homeserver.local" and Caddy will use
+# its internal CA for HTTPS. For Tailscale MagicDNS, set
+# DOMAIN to your tailnet hostname (e.g. "homeserver.tail1234.ts.net").
+# =============================================================
+
+# Seafile
+seafile.{$DOMAIN} {
+	reverse_proxy seafile:80
+	request_body {
+		max_size 10G
+	}
+}
+
+# Vaultwarden
+vaultwarden.{$DOMAIN} {
+	reverse_proxy vaultwarden:80
+}
+
+# Joplin
+joplin.{$DOMAIN} {
+	reverse_proxy joplin:22300
+}
+
+# Portainer
+portainer.{$DOMAIN} {
+	reverse_proxy portainer:9443 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+	}
+}
+
+# WUD (What's Up Docker)
+wud.{$DOMAIN} {
+	reverse_proxy wud:3000
+}
