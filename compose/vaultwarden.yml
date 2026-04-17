@@ -1,0 +1,21 @@
+services:
+  vaultwarden:
+    image: vaultwarden/server:1
+    container_name: vaultwarden
+    restart: unless-stopped
+    volumes:
+      - vaultwarden_data:/data
+    environment:
+      - SIGNUPS_ALLOWED=${VAULTWARDEN_SIGNUPS_ALLOWED:-false}
+      - ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN}
+      - DOMAIN=https://vaultwarden.${DOMAIN}
+      - TZ=${TZ}
+    networks:
+      - proxy
+
+volumes:
+  vaultwarden_data:
+
+networks:
+  proxy:
+    external: true

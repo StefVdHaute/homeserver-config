@@ -1,0 +1,5 @@
+# Copy this to /home/stef/.config/restic/env and fill in values
+# This file is sourced by the systemd service
+
+RESTIC_REPOSITORY=sftp:pi@192.168.1.50:/backups/homeserver
+RESTIC_PASSWORD=CHANGE_ME_TO_A_STRONG_PASSWORD
