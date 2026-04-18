@@ -43,4 +43,4 @@
 
 - [ ] Review all files one by one with help of claude to check for security/configuration problems
 - [ ] Create a plan for first deployment success review and to prepare for integration hell
-- [ ] Recreate this deployment on a smaller scale for the remote Raspberry pi
+- [x] Recreate this deployment on a smaller scale for the remote Raspberry pi — see `hosts/backup/`
