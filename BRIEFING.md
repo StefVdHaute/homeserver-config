@@ -2,17 +2,26 @@
 
 ## Context
 
-This is a fully reproducible home server setup using NixOS, Docker, and
-Docker Compose, versioned in Git.
+Fully reproducible two-host home setup using NixOS + Docker Compose, versioned in Git. A flake at the repo root ties both hosts to the same pinned nixpkgs.
 
 ---
 
-## Hardware
+## Hosts
 
-- **Server:** Dual Xeon, DDR3, 32–48GB RAM
+### `homeserver` (main)
+
+- **Hardware:** Dual Xeon, DDR3, 32–48GB RAM
 - **Boot drive:** 250GB SSD
-- **Storage:** 4x 1TB spinning drives in RAID 10 (2TB usable), mounted at `/mnt/data`
-- **Remote backup:** Raspberry Pi at a separate location
+- **Storage:** 4× 1TB spinning drives in RAID 10 (2TB usable), mounted at `/mnt/data`
+- **Role:** Runs all user-facing services (Seafile, Vaultwarden, Joplin, Portainer, WUD) behind Caddy; originates restic backups.
+- **Config:** `hosts/main/`
+
+### `backupserver` (Pi backup target)
+
+- **Hardware:** Raspberry Pi 4, SD boot, external USB SSD on btrfs (single drive now; btrfs RAID 1 conversion path reserved for when a second drive is added)
+- **Role:** Receives restic backups from `homeserver` over SSH/SFTP via Tailscale. Does not hold the restic password (encryption keys stay on main so a Pi compromise cannot decrypt backups).
+- **Future flex:** can host Docker containers for edge-replicated services at the Pi's location (slow uplink at that site — edge replicas avoid re-pulling over the link).
+- **Config:** `hosts/backup/`
 
 ---
 
@@ -69,11 +78,14 @@ Docker Compose, versioned in Git.
 ### Backup & Restore
 
 - **Tool:** Restic
-- **Target:** Raspberry Pi over SSH
-- **Schedule:** Daily at 03:00 via systemd timer
-- **Scope:** Docker volumes + Seafile data
-- **Retention:** 7 daily, 4 weekly, 6 monthly snapshots
-- **Goal:** Full restore possible from Pi in case of server failure
+- **Target:** `backupserver` (Pi) over SFTP via Tailscale (`sftp:restic@backupserver.<tailnet>.ts.net:/mnt/backups/homeserver`)
+- **Schedule:** Daily at 03:00 via systemd timer on `homeserver`
+- **Scope:** Docker volumes (`/mnt/data/docker/volumes`) + Seafile data (`/mnt/data/seafile`)
+- **Retention:** 7 daily, 4 weekly, 6 monthly snapshots (`restic forget --prune` runs from main)
+- **Integrity:** fast `restic check` after every backup on main; monthly deep `--read-data-subset` planned as follow-up
+- **Security:** restic password only lives on `homeserver`; a compromise of the Pi cannot decrypt backups
+- **Heartbeat:** main writes `/mnt/backups/.last-success` on the Pi at the end of each successful run; the Pi's auto-upgrade skips if the heartbeat is older than 24h
+- **Goal:** full restore possible from Pi in case of main-server failure
 
 ### Updates
 
@@ -96,17 +108,23 @@ Docker Compose, versioned in Git.
 
 | File | Purpose |
 |---|---|
-| `configuration.nix` | NixOS config (boot, RAID, Docker, SSH, Tailscale, firewall, auto-upgrade) |
-| `raid-setup.sh` | RAID 10 setup script for live installer |
-| `Caddyfile` | Reverse proxy routes for all services |
-| `.env.example` | Environment variable template |
-| `compose/*.yml` | Docker Compose files (one per service) |
-| `backup/restic-backup.sh` | Backup script |
-| `backup/restic-backup.service` | Systemd service for backup |
-| `backup/restic-backup.timer` | Systemd timer (daily 03:00) |
-| `backup/restic-env.example` | Restic credentials template |
-| `README.md` | Step-by-step first setup guide |
+| `flake.nix` | Pinned nixpkgs + `nixosConfigurations.main` / `.backup` |
+| `README.md` | Top-level index for both hosts |
+| `BRIEFING.md` | This file — architecture overview |
 | `TODO.md` | Outstanding tasks |
+| `hosts/main/configuration.nix` | Main host NixOS config (boot, RAID, Docker, SSH, Tailscale, firewall, auto-upgrade) |
+| `hosts/main/raid-setup.sh` | RAID 10 setup script for live installer |
+| `hosts/main/Caddyfile` | Reverse proxy routes for all main-host services |
+| `hosts/main/.env.example` | Main-host environment variable template |
+| `hosts/main/compose/*.yml` | Docker Compose files (one per service) |
+| `hosts/main/restic/restic-backup.sh` | Main-host backup script |
+| `hosts/main/restic/restic-backup.service` | Systemd service for backup |
+| `hosts/main/restic/restic-backup.timer` | Systemd timer (daily 03:00) |
+| `hosts/main/restic/restic-env.example` | Restic credentials template |
+| `hosts/main/README.md` | Main-host setup guide |
+| `hosts/backup/configuration.nix` | Pi backup-host NixOS config (aarch64, btrfs, firewall, heartbeat-gated auto-upgrade) |
+| `hosts/backup/disk-setup.sh` | btrfs format script for the external USB drive |
+| `hosts/backup/README.md` | Pi backup-host setup guide |
 
 ---
 
