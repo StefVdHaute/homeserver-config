@@ -11,6 +11,9 @@
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
 
+  # Cross-compile aarch64 (Pi backup host) from this x86_64 machine
+  boot.binfmt.emulatedSystems = [ "aarch64-linux" ];
+
   # RAID support in initrd
   boot.initrd.availableKernelModules = [
     "xhci_pci" "ahci" "usbhid" "sd_mod"
