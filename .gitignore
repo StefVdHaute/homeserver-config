@@ -1,3 +1,30 @@
-.env
-backup/restic-env
+# Secrets (any host, any depth)
+**/.env
+**/restic-env
+
+# Per-host hardware config — regenerated on each NixOS install
+hosts/*/hardware-configuration.nix
+
+# Nix build outputs
+result
+result-*
+
+# direnv cache
+.direnv/
+
+# Editor swap / backup files
+*.swp
+*.swo
+*~
+
+# OS noise
+.DS_Store
+Thumbs.db
+
+# IDE / tool config
+.vscode/
+.idea/
+
+# Local-only scratchpads and agent state
 .claude/
+plan.md

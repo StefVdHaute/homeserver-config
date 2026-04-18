@@ -6,6 +6,6 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 EnvironmentFile=/home/stef/.config/restic/env
-ExecStart=%h/server_config/backup/restic-backup.sh
+ExecStart=%h/server_config/hosts/main/restic/restic-backup.sh
 Nice=19
 IOSchedulingClass=idle
