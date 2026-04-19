@@ -12,7 +12,7 @@ Reproducible NixOS + Docker config for a two-host home setup.
 ```
 .
 ├── flake.nix              # nixosConfigurations.main + .backup (pinned nixpkgs 25.11)
-├── BRIEFING.md            # architecture overview (both hosts)
+├── CLAUDE.md              # architecture + decisions (both hosts)
 ├── TODO.md
 └── hosts/
     ├── main/              # dual-Xeon homeserver
@@ -29,5 +29,5 @@ sudo nixos-rebuild switch --flake ~/server_config#<main|backup>
 
 ## Further reading
 
-- [`BRIEFING.md`](BRIEFING.md) — full architecture, services, backup flow.
+- [`CLAUDE.md`](CLAUDE.md) — full architecture, services, backup flow.
 - [`TODO.md`](TODO.md) — outstanding work.
