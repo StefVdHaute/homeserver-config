@@ -63,7 +63,8 @@ This file is the single source of truth for architecture, decisions, and the beh
 | Joplin Server | Self-hosted note sync (PostgreSQL backend) |
 | Caddy | Reverse proxy with automatic HTTPS |
 | Portainer | Container management web UI |
-| WUD | Container update monitoring dashboard (notify-only, no auto-updates) |
+| WUD | Container update monitoring (notify-only, no auto-updates); posts to ntfy `home-updates` |
+| ntfy | Self-hosted push-notification server for operator alerts (tailnet-only) |
 | Restic | Scheduled backups to Raspberry Pi over SSH |
 
 ### Storage layout on RAID (`/mnt/data`)
@@ -84,6 +85,7 @@ This file is the single source of truth for architecture, decisions, and the beh
 - **Scope:** Docker volumes (`/mnt/data/docker/volumes`, tagged `docker-volumes`, excludes `*.tmp`/`*.log`) + Seafile data (`/mnt/data/seafile`, tagged `seafile-data`).
 - **Retention:** 7 daily, 4 weekly, 6 monthly snapshots. The module runs `restic forget --prune` after each backup via `pruneOpts`.
 - **Integrity:** fast `restic check` after every backup on main; monthly deep `--read-data-subset` planned as follow-up
+- **Outcome alerts:** success → silent ntfy ping on `home-backup` (via the module's `backupCleanupCommand`); failure → audible ntfy ping via a templated `ntfy-backup-failure@.service` wired through each unit's `OnFailure`.
 - **Security:** restic password only lives on `homeserver`; a compromise of the Pi cannot decrypt backups
 - **Aliveness signal:** the Pi's `nixos-upgrade` has an `ExecCondition` that looks for any file under `/mnt/backups/homeserver/snapshots/` newer than 24h. Restic's own snapshot file layout doubles as proof that main is alive and the backup pipeline is working — no extra SSH round-trip from main is needed to write a heartbeat file.
 - **Goal:** full restore possible from Pi in case of main-server failure
@@ -93,6 +95,30 @@ This file is the single source of truth for architecture, decisions, and the beh
 - **Docker containers:** WUD monitors for available updates, user pulls manually
 - **NixOS:** Auto-upgrades daily at 04:30, only after successful backup
 - **Major versions:** Pinned in compose files, require manual tag change
+
+### Notifications
+
+Operator alerts go to a self-hosted [ntfy](https://ntfy.sh) server running on `homeserver` as a Docker container on the `proxy` network, fronted by Caddy at `ntfy.<DOMAIN>`. Tailnet-only reachability; no auth (tailnet membership is the authentication).
+
+Topics, subscribed by the operator's phone:
+
+- **`home-backup`** — restic success pings (Priority 1 / silent) and failures (default priority / audible).
+- **`home-smart`** — `smartd` alerts from both hosts (main's RAID drives + the Pi's external USB SSD).
+- **`home-updates`** — WUD container-update notifications.
+- **`home-infra`** — Pi-side host-health failures (`nixos-upgrade.service`, `mnt-backups.mount`, `tailscaled.service`). Daemon crashes only — connectivity-level Tailscale monitoring is a follow-up.
+
+Producer → URL:
+
+| Producer | Reaches ntfy via |
+|---|---|
+| Restic `backupCleanupCommand` (per-job) | `http://127.0.0.1:8085/home-backup` — silent (Priority 1) |
+| Restic `OnFailure` via `ntfy-backup-failure@.service` | `http://127.0.0.1:8085/home-backup` — audible (Priority 3) |
+| `smartd` on main | `http://127.0.0.1:8085/home-smart` |
+| WUD container on main | `http://ntfy:80/home-updates` (Docker proxy network DNS) |
+| `smartd` on Pi | `$(cat /etc/ntfy/url)/home-smart` — `/etc/ntfy/url` on the Pi holds the base URL (operator-managed, outside git) |
+| Pi `OnFailure` hooks via `ntfy-infra-failure@.service` | `$(cat /etc/ntfy/url)/home-infra` — one templated unit, three wired units (`nixos-upgrade`, `tailscaled`, `mnt-backups.mount`) |
+
+Caveat for the Pi's USB drive: SMART passthrough depends on the enclosure's UAS/SAT support. Verify once with `sudo smartctl -a -d sat /dev/sda` on first deploy. If the enclosure is opaque, replace it with one that isn't — there's no software workaround.
 
 ---
 

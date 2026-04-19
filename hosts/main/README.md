@@ -152,7 +152,11 @@ docker compose --env-file .env -f compose/vaultwarden.yml up -d
 docker compose --env-file .env -f compose/joplin.yml up -d
 docker compose --env-file .env -f compose/portainer.yml up -d
 
-# Update monitoring
+# Push notifications (operator alerts — ntfy). Bring this up BEFORE WUD
+# so WUD's first notifications have somewhere to land.
+docker compose --env-file .env -f compose/ntfy.yml up -d
+
+# Update monitoring (posts container-update notifications to ntfy)
 docker compose --env-file .env -f compose/wud.yml up -d
 ```
 
@@ -169,6 +173,7 @@ Open these URLs (replace `DOMAIN` with your value from `.env`):
 | Joplin | `https://joplin.DOMAIN` |
 | Portainer | `https://portainer.DOMAIN` |
 | WUD | `https://wud.DOMAIN` |
+| ntfy | `https://ntfy.DOMAIN` |
 
 If using `homeserver.local`, your browser will warn about Caddy's
 internal CA certificate on first visit — this is expected. Accept
@@ -225,6 +230,12 @@ sudo systemctl start restic-backups-docker-volumes.service
 sudo journalctl -u restic-backups-docker-volumes.service -f
 ```
 
+On success each job sends a **silent** ntfy notification (Priority 1) to
+the `home-backup` topic. On failure, a templated `ntfy-backup-failure@`
+service fires via `OnFailure` and sends an **audible** alert with the
+unit name, so you can `journalctl -u restic-backups-<tag>.service` for
+details.
+
 ---
 
 ## 10. Connect your devices
@@ -257,6 +268,21 @@ syncing to your desktop. Create a library and don't sync it to
 any client — use this for large archives, media, or anything
 you don't need locally.
 
+### ntfy (push notifications for operator alerts)
+
+1. Install the ntfy app ([iOS](https://apps.apple.com/us/app/ntfy/id1625396347) / [Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy)).
+2. Add your server in the app: tap the "+" button → "Subscribe to topic",
+   enter the topic name (e.g. `home-backup`), then use the three-dot menu
+   to set the server to `https://ntfy.DOMAIN`.
+3. Subscribe to all four operator topics:
+   - `home-backup` — restic backup success (silent) and failure (audible).
+   - `home-smart` — SMART disk alerts from both hosts.
+   - `home-updates` — WUD container-update notifications.
+   - `home-infra` — Pi host-health alerts (nixos-upgrade / mount / tailscaled failures).
+   Each topic can be muted independently in the app.
+4. No login or token is required — the ntfy server is reachable only
+   over Tailscale, so tailnet membership is the authentication.
+
 ---
 
 ## 11. Updates
@@ -264,8 +290,10 @@ you don't need locally.
 ### How updates work
 
 - **Docker containers:** WUD (What's Up Docker) monitors all containers and
-  shows available updates in its dashboard at `https://wud.DOMAIN`. It does
-  not auto-update — you decide when to pull new images.
+  shows available updates in its dashboard at `https://wud.DOMAIN`. New
+  updates also push a notification to ntfy's `home-updates` topic so you
+  don't have to keep the dashboard open. WUD does not auto-update — you
+  decide when to pull new images.
 - **NixOS:** Auto-upgrades run daily at 04:30, but only after a successful
   Restic backup. If the backup fails, the upgrade is skipped.
 - **Major versions:** All images are pinned to their current major version

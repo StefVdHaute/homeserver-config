@@ -8,6 +8,23 @@
 
 { config, lib, pkgs, ... }:
 
+let
+  # Operator-alert helper. Reads the base URL of the ntfy server from
+  # /etc/ntfy/url (operator-managed, e.g. `https://ntfy.<tailnet>.ts.net`)
+  # and appends the topic.
+  #   ntfyNotify <topic> <priority> <title> <message>
+  ntfyNotify = pkgs.writeShellScript "ntfy-notify" ''
+    set -euo pipefail
+    topic="$1"; priority="$2"; title="$3"; message="$4"
+    base="$(cat /etc/ntfy/url)"
+    ${pkgs.curl}/bin/curl -fsS \
+      -H "Priority: $priority" \
+      -H "Title: $title" \
+      -d "$message" \
+      "$base/$topic" >/dev/null
+  '';
+in
+
 {
   imports = [
     ./hardware-configuration.nix
@@ -124,6 +141,20 @@
   ];
 
   # ============================================================
+  # SMART disk monitoring (alerts to ntfy /home-smart via main's Caddy)
+  # USB-SATA bridges usually need `-d sat` for SMART passthrough; verify
+  # with `sudo smartctl -a -d sat /dev/sda` after first boot.
+  # ============================================================
+  services.smartd = {
+    enable = true;
+    defaults.monitored = "-a -d sat -o on -s (S/../.././02|L/../../6/03) -M exec ${pkgs.writeShellScript "smartd-ntfy" ''
+      exec ${ntfyNotify} home-smart 4 \
+        "SMART alert: backupserver — $SMARTD_DEVICE" \
+        "$SMARTD_MESSAGE"
+    ''}";
+  };
+
+  # ============================================================
   # Automatic Upgrades
   # Runs daily at 05:30, but only when a recent restic snapshot has landed
   # (proof that main is alive and the backup pipeline is working).
@@ -139,22 +170,52 @@
   # Skip the upgrade if no snapshot file on the backup repo has been written
   # in the last 24h. This catches "main has been offline for a week" and
   # "backups have been silently failing."
-  systemd.services.nixos-upgrade.serviceConfig.ExecCondition =
-    let
-      script = pkgs.writeShellScript "backup-fresh" ''
-        snapdir=/mnt/backups/homeserver/snapshots
-        if [ ! -d "$snapdir" ]; then
-          echo "no backup repo yet — skipping upgrade"
-          exit 1
-        fi
-        recent=$(find "$snapdir" -type f -newermt '-24 hours' -print -quit)
-        if [ -z "$recent" ]; then
-          echo "no restic snapshot newer than 24h — skipping upgrade"
-          exit 1
-        fi
-        exit 0
-      '';
-    in "${script}";
+  systemd.services.nixos-upgrade = {
+    serviceConfig.ExecCondition =
+      let
+        script = pkgs.writeShellScript "backup-fresh" ''
+          snapdir=/mnt/backups/homeserver/snapshots
+          if [ ! -d "$snapdir" ]; then
+            echo "no backup repo yet — skipping upgrade"
+            exit 1
+          fi
+          recent=$(find "$snapdir" -type f -newermt '-24 hours' -print -quit)
+          if [ -z "$recent" ]; then
+            echo "no restic snapshot newer than 24h — skipping upgrade"
+            exit 1
+          fi
+          exit 0
+        '';
+      in "${script}";
+    unitConfig.OnFailure = [ "ntfy-infra-failure@nixos-upgrade.service" ];
+  };
+
+  # ============================================================
+  # Pi-side infra-failure alerts (→ ntfy /home-infra)
+  # ============================================================
+
+  # Templated notifier — %i = the failed unit's name. Reused by every
+  # unitConfig.OnFailure hook that should land on the home-infra topic.
+  systemd.services."ntfy-infra-failure@" = {
+    description = "Notify ntfy of failed Pi unit %i";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${ntfyNotify} home-infra 4 'Pi alert' 'unit %i failed — run journalctl -u %i for details'";
+    };
+  };
+
+  # tailscaled daemon crash. Note: this only catches the daemon process
+  # dying. "Daemon up but tailnet unreachable" needs an active health
+  # check — tracked in TODO.md.
+  systemd.services.tailscaled.unitConfig.OnFailure =
+    [ "ntfy-infra-failure@tailscaled.service" ];
+
+  # /mnt/backups mount failure (USB drive detached, fs errors, etc.).
+  # Override on the auto-generated mount unit; `nofail` in the fs options
+  # keeps boot succeeding, but the unit still enters `failed` state and
+  # fires OnFailure.
+  systemd.units."mnt-backups.mount".unitConfig.OnFailure =
+    [ "ntfy-infra-failure@mnt-backups.mount" ];
 
   system.stateVersion = "25.11";
 }
