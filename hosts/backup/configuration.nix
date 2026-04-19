@@ -8,6 +8,23 @@
 
 { config, lib, pkgs, ... }:
 
+let
+  # Operator-alert helper. Reads the base URL of the ntfy server from
+  # /etc/ntfy/url (operator-managed, e.g. `https://ntfy.<tailnet>.ts.net`)
+  # and appends the topic.
+  #   ntfyNotify <topic> <priority> <title> <message>
+  ntfyNotify = pkgs.writeShellScript "ntfy-notify" ''
+    set -euo pipefail
+    topic="$1"; priority="$2"; title="$3"; message="$4"
+    base="$(cat /etc/ntfy/url)"
+    ${pkgs.curl}/bin/curl -fsS \
+      -H "Priority: $priority" \
+      -H "Title: $title" \
+      -d "$message" \
+      "$base/$topic" >/dev/null
+  '';
+in
+
 {
   imports = [
     ./hardware-configuration.nix
@@ -122,6 +139,20 @@
     btrfs-progs
     smartmontools
   ];
+
+  # ============================================================
+  # SMART disk monitoring (alerts to ntfy /home-smart via main's Caddy)
+  # USB-SATA bridges usually need `-d sat` for SMART passthrough; verify
+  # with `sudo smartctl -a -d sat /dev/sda` after first boot.
+  # ============================================================
+  services.smartd = {
+    enable = true;
+    defaults.monitored = "-a -d sat -o on -s (S/../.././02|L/../../6/03) -M exec ${pkgs.writeShellScript "smartd-ntfy" ''
+      exec ${ntfyNotify} home-smart 4 \
+        "SMART alert: backupserver — $SMARTD_DEVICE" \
+        "$SMARTD_MESSAGE"
+    ''}";
+  };
 
   # ============================================================
   # Automatic Upgrades

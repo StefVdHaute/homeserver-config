@@ -75,7 +75,21 @@ Commit locally (you can clean up before pushing later), then continue.
 
 ---
 
-## 6. Generate hardware config and apply
+## 6. Point SMART alerts at main's ntfy
+
+The Pi's `smartd` posts disk-health alerts to the ntfy server running on main.
+Write the base URL once, outside Nix:
+
+```bash
+sudo install -m 600 -o root -g root /dev/null /etc/ntfy/url
+sudo tee /etc/ntfy/url <<< 'https://ntfy.<your-tailnet-DOMAIN>'
+```
+
+The script `/run/current-system/sw/bin/smartd-ntfy` appends `/home-smart` at runtime.
+
+---
+
+## 7. Generate hardware config and apply
 
 ```bash
 sudo nixos-generate-config --root / --dir /home/stef/server_config/hosts/backup/ --no-filesystems
@@ -88,25 +102,29 @@ After this, the Pi:
 - has `stef` and `restic` users with authorized keys
 - has `/mnt/backups` mounted from the USB drive
 - SSH is only reachable via the tailnet
+- `services.smartd` posts disk alerts to main's ntfy topic `home-smart`
 - `nixos-upgrade` runs daily at 05:30 but only when a restic snapshot has landed in the last 24h
+
+### 7.1 Verify SMART passthrough on the USB drive
+
+Not every USB-SATA bridge exposes SMART. Check:
+
+```bash
+sudo smartctl -a -d sat /dev/sda | head -30
+```
+
+If SMART attributes come through (look for the "Vendor Specific SMART Attributes" table), the alert path works. If not, this drive's enclosure is opaque to SMART and you'll need to replace it with one that supports UAS/SAT passthrough — notify your future self accordingly.
 
 ---
 
-## 7. First backup from main
+## 8. First backup from main
 
-On `homeserver`, update `~/.config/restic/env`:
-
-```
-RESTIC_REPOSITORY=sftp:restic@backupserver.<your-tailnet>.ts.net:/mnt/backups/homeserver
-RESTIC_PASSWORD=<strong-password-keep-this-safe>
-```
-
-Then:
+Follow `hosts/main/README.md` §9 to create `/etc/restic/env` on main and
+trigger the first backup:
 
 ```bash
-source ~/.config/restic/env
-restic init
-bash ~/server_config/hosts/main/restic/restic-backup.sh
+sudo systemctl start restic-backups-docker-volumes.service
+sudo journalctl -u restic-backups-docker-volumes.service -f
 ```
 
 Verify the snapshot landed on the Pi:

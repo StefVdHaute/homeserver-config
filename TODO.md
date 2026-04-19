@@ -8,7 +8,7 @@
 ## Infrastructure
 
 - [x] Firewall rules per service in NixOS config
-- [ ] SMART disk monitoring via `smartd` with alerts
+- [x] SMART disk monitoring via `smartd` with alerts — enabled on both hosts, alerts via ntfy `home-smart`
 
 ## Services
 
@@ -32,7 +32,11 @@
 
 - [ ] HTTPS certs via Tailscale (`tailscale cert`) — replace Caddy's internal CA
 - [ ] Email sending / notification system for services (password resets, alerts)
-- [ ] Migrate `/etc/restic/env` (and future secrets) to sops-nix or agenix
+- [ ] Migrate `/etc/restic/env` and `/etc/ntfy/url` (and future secrets) to sops-nix or agenix
+
+## Pi-side alerts (follow-up)
+
+- [ ] ntfy alerts from the Pi for: `nixos-upgrade` failure, `/mnt/backups` mount failure, Tailscale disconnect.
 
 ## Backup
 
