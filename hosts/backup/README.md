@@ -104,6 +104,7 @@ After this, the Pi:
 - SSH is only reachable via the tailnet
 - `services.smartd` posts disk alerts to main's ntfy topic `home-smart`
 - `nixos-upgrade` runs daily at 05:30 but only when a restic snapshot has landed in the last 24h
+- posts `home-infra` alerts to ntfy on `nixos-upgrade`, `tailscaled`, or `mnt-backups.mount` failure (via the shared `ntfy-infra-failure@.service` template)
 
 ### 7.1 Verify SMART passthrough on the USB drive
 
@@ -152,5 +153,5 @@ Online; no downtime. btrfs rebalances data + metadata to mirror across both devi
 
 - **`/mnt/backups` didn't mount after boot** — check `systemctl status mnt-backups.mount`. `nofail` in the fs options means the Pi boots anyway; the mount may have failed because the drive wasn't plugged in or the label doesn't match `backup-data`. Run `lsblk -f` to confirm the label.
 - **SSH refused from main** — confirm `tailscale status` on the Pi shows it as online, and that `homeserver`'s pubkey is in `authorized_keys` for `restic`. `sudo cat /var/lib/restic/.ssh/authorized_keys` on the Pi.
-- **nixos-upgrade skipped with "no restic snapshot newer than 24h"** — expected if backups are failing on main. Check `journalctl -u restic-backup.service` on main first.
+- **nixos-upgrade skipped with "no restic snapshot newer than 24h"** — expected if backups are failing on main. Check `journalctl -u restic-backups-docker-volumes.service` and `journalctl -u restic-backups-seafile-data.service` on main first.
 - **Future: running Docker containers here** — flip `virtualisation.docker.enable = true;` in `hosts/backup/configuration.nix`, add `stef` to `extraGroups = [ "wheel" "docker" ]`, and add compose files under a new `hosts/backup/compose/` directory.

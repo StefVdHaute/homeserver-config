@@ -1,6 +1,6 @@
 # Main host (`homeserver`) — setup guide
 
-Scope: the dual-Xeon main server running all user-facing services (Seafile, Vaultwarden, Joplin, Portainer, WUD) behind Caddy. For the Raspberry Pi backup target, see [`hosts/backup/README.md`](../backup/README.md).
+Scope: the dual-Xeon main server running all user-facing services (Seafile, Vaultwarden, Joplin, Portainer, WUD, ntfy) behind Caddy. For the Raspberry Pi backup target, see [`hosts/backup/README.md`](../backup/README.md).
 
 ## Prerequisites
 

@@ -65,7 +65,8 @@ This file is the single source of truth for architecture, decisions, and the beh
 | Portainer | Container management web UI |
 | WUD | Container update monitoring (notify-only, no auto-updates); posts to ntfy `home-updates` |
 | ntfy | Self-hosted push-notification server for operator alerts (tailnet-only) |
-| Restic | Scheduled backups to Raspberry Pi over SSH |
+
+Restic is not in the table above — it runs as a NixOS service (`services.restic.backups`), not a Docker container. See the Backup & Restore section below.
 
 ### Storage layout on RAID (`/mnt/data`)
 
