@@ -1,8 +1,8 @@
-# Home Server Setup — Project Briefing
-
-## Context
+# Home Server Config
 
 Fully reproducible two-host home setup using NixOS + Docker Compose, versioned in Git. A flake at the repo root ties both hosts to the same pinned nixpkgs.
+
+This file is the single source of truth for architecture, decisions, and the behaviours this repo encodes. Operational setup steps live in each host's `README.md`; outstanding work lives in `TODO.md`.
 
 ---
 
@@ -84,7 +84,7 @@ Fully reproducible two-host home setup using NixOS + Docker Compose, versioned i
 - **Retention:** 7 daily, 4 weekly, 6 monthly snapshots (`restic forget --prune` runs from main)
 - **Integrity:** fast `restic check` after every backup on main; monthly deep `--read-data-subset` planned as follow-up
 - **Security:** restic password only lives on `homeserver`; a compromise of the Pi cannot decrypt backups
-- **Heartbeat:** main writes `/mnt/backups/.last-success` on the Pi at the end of each successful run; the Pi's auto-upgrade skips if the heartbeat is older than 24h
+- **Aliveness signal:** the Pi's `nixos-upgrade` has an `ExecCondition` that looks for any file under `/mnt/backups/homeserver/snapshots/` newer than 24h. Restic's own snapshot file layout doubles as proof that main is alive and the backup pipeline is working — no extra SSH round-trip from main is needed to write a heartbeat file.
 - **Goal:** full restore possible from Pi in case of main-server failure
 
 ### Updates
@@ -110,7 +110,7 @@ Fully reproducible two-host home setup using NixOS + Docker Compose, versioned i
 |---|---|
 | `flake.nix` | Pinned nixpkgs + `nixosConfigurations.main` / `.backup` |
 | `README.md` | Top-level index for both hosts |
-| `BRIEFING.md` | This file — architecture overview |
+| `CLAUDE.md` | This file — architecture + decisions |
 | `TODO.md` | Outstanding tasks |
 | `hosts/main/configuration.nix` | Main host NixOS config (boot, RAID, Docker, SSH, Tailscale, firewall, auto-upgrade) |
 | `hosts/main/raid-setup.sh` | RAID 10 setup script for live installer |
