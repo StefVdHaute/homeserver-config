@@ -190,16 +190,35 @@ in
 
   # ============================================================
   # Backups (restic → backupserver over SFTP/Tailscale)
+  # Silent success ping + audible failure ping go to ntfy /home-backup.
   # ============================================================
   services.restic.backups = {
     docker-volumes = resticCommon // {
       paths = [ "/mnt/data/docker/volumes" ];
       exclude = [ "*.tmp" "*.log" ];
       extraBackupArgs = [ "--tag" "docker-volumes" ];
+      backupCleanupCommand = "${ntfyNotify} home-backup 1 'Backup OK' 'docker-volumes snapshot completed'";
     };
     seafile-data = resticCommon // {
       paths = [ "/mnt/data/seafile" ];
       extraBackupArgs = [ "--tag" "seafile-data" ];
+      backupCleanupCommand = "${ntfyNotify} home-backup 1 'Backup OK' 'seafile-data snapshot completed'";
+    };
+  };
+
+  # Wire each backup unit's failure path to the templated notifier below.
+  systemd.services.restic-backups-docker-volumes.unitConfig.OnFailure =
+    [ "ntfy-backup-failure@restic-backups-docker-volumes.service" ];
+  systemd.services.restic-backups-seafile-data.unitConfig.OnFailure =
+    [ "ntfy-backup-failure@restic-backups-seafile-data.service" ];
+
+  # Templated notifier: reusable for any future OnFailure hook that should
+  # land on the backup topic. %i = the failed unit's name.
+  systemd.services."ntfy-backup-failure@" = {
+    description = "Notify ntfy of failed backup unit %i";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${ntfyNotify} home-backup 3 'Backup FAILED' 'unit %i failed — run journalctl -u %i for details'";
     };
   };
 

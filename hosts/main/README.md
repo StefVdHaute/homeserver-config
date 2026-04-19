@@ -229,6 +229,12 @@ sudo systemctl start restic-backups-docker-volumes.service
 sudo journalctl -u restic-backups-docker-volumes.service -f
 ```
 
+On success each job sends a **silent** ntfy notification (Priority 1) to
+the `home-backup` topic. On failure, a templated `ntfy-backup-failure@`
+service fires via `OnFailure` and sends an **audible** alert with the
+unit name, so you can `journalctl -u restic-backups-<tag>.service` for
+details.
+
 ---
 
 ## 10. Connect your devices
