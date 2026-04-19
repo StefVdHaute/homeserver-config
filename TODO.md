@@ -34,9 +34,10 @@
 - [ ] Email sending / notification system for services (password resets, alerts)
 - [ ] Migrate `/etc/restic/env` and `/etc/ntfy/url` (and future secrets) to sops-nix or agenix
 
-## Pi-side alerts (follow-up)
+## Pi-side alerts
 
-- [ ] ntfy alerts from the Pi for: `nixos-upgrade` failure, `/mnt/backups` mount failure, Tailscale disconnect.
+- [x] ntfy alerts from the Pi for: `nixos-upgrade` failure, `/mnt/backups` mount failure, `tailscaled` daemon crash — via `ntfy-infra-failure@.service` → `home-infra` topic.
+- [ ] Tailscale connectivity health check — `OnFailure` covers the daemon dying, not "daemon up but tailnet unreachable". Needs an active timer running `tailscale status --json` and alerting on non-Running state.
 
 ## Backup
 

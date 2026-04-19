@@ -105,6 +105,7 @@ Topics, subscribed by the operator's phone:
 - **`home-backup`** — restic success pings (Priority 1 / silent) and failures (default priority / audible).
 - **`home-smart`** — `smartd` alerts from both hosts (main's RAID drives + the Pi's external USB SSD).
 - **`home-updates`** — WUD container-update notifications.
+- **`home-infra`** — Pi-side host-health failures (`nixos-upgrade.service`, `mnt-backups.mount`, `tailscaled.service`). Daemon crashes only — connectivity-level Tailscale monitoring is a follow-up.
 
 Producer → URL:
 
@@ -115,6 +116,7 @@ Producer → URL:
 | `smartd` on main | `http://127.0.0.1:8085/home-smart` |
 | WUD container on main | `http://ntfy:80/home-updates` (Docker proxy network DNS) |
 | `smartd` on Pi | `$(cat /etc/ntfy/url)/home-smart` — `/etc/ntfy/url` on the Pi holds the base URL (operator-managed, outside git) |
+| Pi `OnFailure` hooks via `ntfy-infra-failure@.service` | `$(cat /etc/ntfy/url)/home-infra` — one templated unit, three wired units (`nixos-upgrade`, `tailscaled`, `mnt-backups.mount`) |
 
 Caveat for the Pi's USB drive: SMART passthrough depends on the enclosure's UAS/SAT support. Verify once with `sudo smartctl -a -d sat /dev/sda` on first deploy. If the enclosure is opaque, replace it with one that isn't — there's no software workaround.
 
