@@ -274,10 +274,11 @@ you don't need locally.
 2. Add your server in the app: tap the "+" button → "Subscribe to topic",
    enter the topic name (e.g. `home-backup`), then use the three-dot menu
    to set the server to `https://ntfy.DOMAIN`.
-3. Subscribe to all three operator topics:
+3. Subscribe to all four operator topics:
    - `home-backup` — restic backup success (silent) and failure (audible).
    - `home-smart` — SMART disk alerts from both hosts.
    - `home-updates` — WUD container-update notifications.
+   - `home-infra` — Pi host-health alerts (nixos-upgrade / mount / tailscaled failures).
    Each topic can be muted independently in the app.
 4. No login or token is required — the ntfy server is reachable only
    over Tailscale, so tailnet membership is the authentication.
