@@ -178,54 +178,51 @@ the certificate to proceed.
 
 ## 9. Set up backups
 
-### 9.1 Prepare the Raspberry Pi
+Prerequisite: the `backupserver` Pi is already running and reachable
+via Tailscale (see [`hosts/backup/README.md`](../backup/README.md)).
 
-On the Pi, create the backup directory and ensure SSH key access:
+### 9.1 Write the env file
 
-```bash
-# On the Pi
-mkdir -p /backups/homeserver
-
-# On the server — generate a key if you don't have one
-ssh-keygen -t ed25519
-ssh-copy-id pi@<pi-ip-address>
-```
-
-### 9.2 Configure Restic credentials
+One file holds both the repository URL and the password, read by the
+restic systemd service at runtime:
 
 ```bash
-mkdir -p ~/.config/restic
-cp hosts/main/restic/restic-env.example ~/.config/restic/env
-```
-
-Edit `~/.config/restic/env`:
-
-```
+sudo install -m 600 -o root -g root /dev/null /etc/restic/env
+sudo tee /etc/restic/env >/dev/null <<EOF
 RESTIC_REPOSITORY=sftp:restic@backupserver.<your-tailnet>.ts.net:/mnt/backups/homeserver
-RESTIC_PASSWORD=<strong-password-keep-this-safe>
+RESTIC_PASSWORD=$(openssl rand -hex 32)
+EOF
 ```
 
-Save the `RESTIC_PASSWORD` somewhere safe (e.g. in Vaultwarden).
-You need it to restore backups.
+Save the `RESTIC_PASSWORD` value somewhere safe (e.g. Vaultwarden) —
+restores need it. `cat /etc/restic/env` to recover it once.
 
-### 9.3 Initialize and test
+### 9.2 Give root an SSH key for the Pi
+
+The backup runs as root, so root needs an SSH key the Pi accepts:
 
 ```bash
-source ~/.config/restic/env
-restic init
-bash ~/server_config/hosts/main/restic/restic-backup.sh
+sudo ssh-keygen -t ed25519 -f /root/.ssh/id_ed25519 -N ""
+sudo cat /root/.ssh/id_ed25519.pub
+# paste this pubkey into hosts/backup/configuration.nix under
+# users.users.restic.openssh.authorizedKeys.keys, then rebuild the Pi
 ```
 
-### 9.4 Enable the daily timer
+### 9.3 Apply
 
 ```bash
-sudo cp ~/server_config/hosts/main/restic/restic-backup.service /etc/systemd/system/
-sudo cp ~/server_config/hosts/main/restic/restic-backup.timer /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now restic-backup.timer
+sudo nixos-rebuild switch --flake ~/server_config#main
+```
 
-# Verify it's scheduled
-systemctl list-timers restic-backup.timer
+The two timers — `restic-backups-docker-volumes.timer` and
+`restic-backups-seafile-data.timer` — fire daily at 03:00. Verify:
+
+```bash
+systemctl list-timers 'restic-backups-*'
+
+# Run once manually to initialise the repo and confirm end-to-end
+sudo systemctl start restic-backups-docker-volumes.service
+sudo journalctl -u restic-backups-docker-volumes.service -f
 ```
 
 ---

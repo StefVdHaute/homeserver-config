@@ -1,5 +1,27 @@
 { config, pkgs, ... }:
 
+let
+  # Shared options for every restic backup job on this host.
+  # /etc/restic/env holds RESTIC_REPOSITORY= and RESTIC_PASSWORD=,
+  # read by the service at runtime (expected repo:
+  # sftp:restic@backupserver.<tailnet>.ts.net:/mnt/backups/homeserver).
+  resticCommon = {
+    environmentFile = "/etc/restic/env";
+    initialize = true;
+    timerConfig = {
+      OnCalendar = "03:00";
+      Persistent = true;
+      RandomizedDelaySec = "30m";
+    };
+    pruneOpts = [
+      "--keep-daily 7"
+      "--keep-weekly 4"
+      "--keep-monthly 6"
+    ];
+    checkOpts = [ ];   # empty = structural check every run, no --read-data
+  };
+in
+
 {
   imports = [
     ./hardware-configuration.nix
@@ -142,6 +164,21 @@
   };
 
   # ============================================================
+  # Backups (restic → backupserver over SFTP/Tailscale)
+  # ============================================================
+  services.restic.backups = {
+    docker-volumes = resticCommon // {
+      paths = [ "/mnt/data/docker/volumes" ];
+      exclude = [ "*.tmp" "*.log" ];
+      extraBackupArgs = [ "--tag" "docker-volumes" ];
+    };
+    seafile-data = resticCommon // {
+      paths = [ "/mnt/data/seafile" ];
+      extraBackupArgs = [ "--tag" "seafile-data" ];
+    };
+  };
+
+  # ============================================================
   # Automatic Upgrades
   # ============================================================
   system.autoUpgrade = {
@@ -150,10 +187,16 @@
     dates = "04:30";
   };
 
-  # Only upgrade after a successful backup
+  # Only upgrade after both restic backup jobs succeeded today
   systemd.services.nixos-upgrade = {
-    after = [ "restic-backup.service" ];
-    requires = [ "restic-backup.service" ];
+    after = [
+      "restic-backups-docker-volumes.service"
+      "restic-backups-seafile-data.service"
+    ];
+    requires = [
+      "restic-backups-docker-volumes.service"
+      "restic-backups-seafile-data.service"
+    ];
   };
 
   system.stateVersion = "25.11";
