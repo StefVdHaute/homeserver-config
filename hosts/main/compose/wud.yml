@@ -7,6 +7,12 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     environment:
       - TZ=${TZ}
+      # Push container-update notifications to ntfy's home-updates topic.
+      # ntfy runs on the same proxy network; reachable as http://ntfy:80.
+      - "WUD_TRIGGER_HTTP_NTFY_URL=http://ntfy:80/home-updates"
+      - "WUD_TRIGGER_HTTP_NTFY_METHOD=POST"
+      - "WUD_TRIGGER_HTTP_NTFY_SIMPLEBODY={{container.name}}: update {{container.updateKind.localValue}} → {{container.updateKind.remoteValue}}"
+      - "WUD_TRIGGER_HTTP_NTFY_BATCHBODY={{containers.length}} containers have updates available — see https://wud.${DOMAIN}"
     networks:
       - proxy
 

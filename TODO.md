@@ -14,7 +14,7 @@
 
 - [x] Seafile config with Redis caching (v13)
 - [x] Container update monitoring (WUD)
-- [ ] Configure WUD notification channel (email/Discord/Slack)
+- [x] Configure WUD notification channel — HTTP trigger pointing at ntfy `home-updates`
 - [ ] Monitoring/alerting (Grafana + Prometheus + node-exporter)
 - [ ] DNS/local resolution (e.g. AdGuard Home or Pi-hole)
 - [ ] Log viewer (e.g. Dozzle)
