@@ -63,7 +63,7 @@ This file is the single source of truth for architecture, decisions, and the beh
 | Joplin Server | Self-hosted note sync (PostgreSQL backend) |
 | Caddy | Reverse proxy with automatic HTTPS |
 | Portainer | Container management web UI |
-| WUD | Container update monitoring dashboard (notify-only, no auto-updates) |
+| WUD | Container update monitoring (notify-only, no auto-updates); posts to ntfy `home-updates` |
 | ntfy | Self-hosted push-notification server for operator alerts (tailnet-only) |
 | Restic | Scheduled backups to Raspberry Pi over SSH |
 

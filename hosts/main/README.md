@@ -152,11 +152,12 @@ docker compose --env-file .env -f compose/vaultwarden.yml up -d
 docker compose --env-file .env -f compose/joplin.yml up -d
 docker compose --env-file .env -f compose/portainer.yml up -d
 
-# Update monitoring
-docker compose --env-file .env -f compose/wud.yml up -d
-
-# Push notifications (operator alerts — ntfy)
+# Push notifications (operator alerts — ntfy). Bring this up BEFORE WUD
+# so WUD's first notifications have somewhere to land.
 docker compose --env-file .env -f compose/ntfy.yml up -d
+
+# Update monitoring (posts container-update notifications to ntfy)
+docker compose --env-file .env -f compose/wud.yml up -d
 ```
 
 ---
@@ -288,8 +289,10 @@ you don't need locally.
 ### How updates work
 
 - **Docker containers:** WUD (What's Up Docker) monitors all containers and
-  shows available updates in its dashboard at `https://wud.DOMAIN`. It does
-  not auto-update — you decide when to pull new images.
+  shows available updates in its dashboard at `https://wud.DOMAIN`. New
+  updates also push a notification to ntfy's `home-updates` topic so you
+  don't have to keep the dashboard open. WUD does not auto-update — you
+  decide when to pull new images.
 - **NixOS:** Auto-upgrades run daily at 04:30, but only after a successful
   Restic backup. If the backup fails, the upgrade is skipped.
 - **Major versions:** All images are pinned to their current major version
