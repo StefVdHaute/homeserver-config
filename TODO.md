@@ -2,8 +2,8 @@
 
 ## Nix
 
-- [ ] Improve first deployment
-- [ ] Check if the backup script can be replaced by something Nix-native
+- [x] Improve first deployment — restic is now declarative via `services.restic.backups`
+- [x] Check if the backup script can be replaced by something Nix-native — replaced with `services.restic.backups` in `hosts/main/configuration.nix`
 
 ## Infrastructure
 
@@ -32,6 +32,7 @@
 
 - [ ] HTTPS certs via Tailscale (`tailscale cert`) — replace Caddy's internal CA
 - [ ] Email sending / notification system for services (password resets, alerts)
+- [ ] Migrate `/etc/restic/env` (and future secrets) to sops-nix or agenix
 
 ## Backup
 
