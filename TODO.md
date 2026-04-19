@@ -43,7 +43,7 @@
 
 - [x] Restic systemd timer schedule
 - [ ] Scheduled `restic check` and restore verification
-- [ ] A talk needs to happen for what the remote backup server will look like
+- [x] A talk needs to happen for what the remote backup server will look like — designed as `hosts/backup/` (Raspberry Pi 4, btrfs on external USB SSD; see `CLAUDE.md`)
 
 ## Before deployment
 
