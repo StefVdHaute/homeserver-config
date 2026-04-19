@@ -38,3 +38,8 @@ portainer.{$DOMAIN} {
 wud.{$DOMAIN} {
 	reverse_proxy wud:3000
 }
+
+# ntfy (push notifications for operator alerts)
+ntfy.{$DOMAIN} {
+	reverse_proxy ntfy:80
+}
