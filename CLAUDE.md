@@ -64,6 +64,7 @@ This file is the single source of truth for architecture, decisions, and the beh
 | Caddy | Reverse proxy with automatic HTTPS |
 | Portainer | Container management web UI |
 | WUD | Container update monitoring dashboard (notify-only, no auto-updates) |
+| ntfy | Self-hosted push-notification server for operator alerts (tailnet-only) |
 | Restic | Scheduled backups to Raspberry Pi over SSH |
 
 ### Storage layout on RAID (`/mnt/data`)
@@ -93,6 +94,25 @@ This file is the single source of truth for architecture, decisions, and the beh
 - **Docker containers:** WUD monitors for available updates, user pulls manually
 - **NixOS:** Auto-upgrades daily at 04:30, only after successful backup
 - **Major versions:** Pinned in compose files, require manual tag change
+
+### Notifications
+
+Operator alerts go to a self-hosted [ntfy](https://ntfy.sh) server running on `homeserver` as a Docker container on the `proxy` network, fronted by Caddy at `ntfy.<DOMAIN>`. Tailnet-only reachability; no auth (tailnet membership is the authentication).
+
+Topics, subscribed by the operator's phone:
+
+- **`home-backup`** — restic success pings (Priority 1 / silent) and failures (default priority / audible).
+- **`home-smart`** — `smartd` alerts from both hosts (main's RAID drives + the Pi's external USB SSD).
+- **`home-updates`** — WUD container-update notifications.
+
+Producer → URL:
+
+| Producer | Reaches ntfy via |
+|---|---|
+| Restic hooks on main | `http://127.0.0.1:8085/home-backup` (host-mapped port) |
+| `smartd` on main | `http://127.0.0.1:8085/home-smart` |
+| WUD container on main | `http://ntfy:80/home-updates` (Docker proxy network DNS) |
+| `smartd` on Pi | `$(cat /etc/ntfy/url)/home-smart` — `/etc/ntfy/url` on the Pi holds the base URL (operator-managed, outside git) |
 
 ---
 
