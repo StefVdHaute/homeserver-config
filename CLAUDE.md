@@ -114,6 +114,8 @@ Producer → URL:
 | WUD container on main | `http://ntfy:80/home-updates` (Docker proxy network DNS) |
 | `smartd` on Pi | `$(cat /etc/ntfy/url)/home-smart` — `/etc/ntfy/url` on the Pi holds the base URL (operator-managed, outside git) |
 
+Caveat for the Pi's USB drive: SMART passthrough depends on the enclosure's UAS/SAT support. Verify once with `sudo smartctl -a -d sat /dev/sda` on first deploy. If the enclosure is opaque, replace it with one that isn't — there's no software workaround.
+
 ---
 
 ## Key Requirements

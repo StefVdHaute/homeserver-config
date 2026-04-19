@@ -1,6 +1,19 @@
 { config, pkgs, ... }:
 
 let
+  # Operator-alert helper. POSTs to the locally-running ntfy container
+  # (see hosts/main/compose/ntfy.yml, port-mapped 127.0.0.1:8085 → :80).
+  #   ntfyNotify <topic> <priority> <title> <message>
+  ntfyNotify = pkgs.writeShellScript "ntfy-notify" ''
+    set -euo pipefail
+    topic="$1"; priority="$2"; title="$3"; message="$4"
+    ${pkgs.curl}/bin/curl -fsS \
+      -H "Priority: $priority" \
+      -H "Title: $title" \
+      -d "$message" \
+      "http://127.0.0.1:8085/$topic" >/dev/null
+  '';
+
   # Shared options for every restic backup job on this host.
   # /etc/restic/env holds RESTIC_REPOSITORY= and RESTIC_PASSWORD=,
   # read by the service at runtime (expected repo:
@@ -161,6 +174,18 @@ in
     ];
     # Trust all traffic from Tailscale interface
     trustedInterfaces = [ "tailscale0" ];
+  };
+
+  # ============================================================
+  # SMART disk monitoring (alerts to ntfy /home-smart)
+  # ============================================================
+  services.smartd = {
+    enable = true;
+    defaults.monitored = "-a -o on -s (S/../.././02|L/../../6/03) -M exec ${pkgs.writeShellScript "smartd-ntfy" ''
+      exec ${ntfyNotify} home-smart 4 \
+        "SMART alert: homeserver — $SMARTD_DEVICE" \
+        "$SMARTD_MESSAGE"
+    ''}";
   };
 
   # ============================================================
