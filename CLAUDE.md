@@ -140,6 +140,7 @@ Caveat for the Pi's USB drive: SMART passthrough depends on the enclosure's UAS/
 | `README.md` | Top-level index for both hosts |
 | `CLAUDE.md` | This file — architecture + decisions |
 | `TODO.md` | Outstanding tasks |
+| `modules/alerts.nix` | Shared NixOS module: ntfy helper, smartd wiring, templated failure notifiers. Imported by both hosts. |
 | `hosts/main/configuration.nix` | Main host NixOS config (boot, RAID, Docker, SSH, Tailscale, firewall, auto-upgrade) |
 | `hosts/main/raid-setup.sh` | RAID 10 setup script for live installer |
 | `hosts/main/Caddyfile` | Reverse proxy routes for all main-host services |
