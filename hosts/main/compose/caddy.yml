@@ -11,9 +11,17 @@ services:
       - ../Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+      # ACME cert files (wildcard cert for *.${DOMAIN}) — populated and
+      # renewed by NixOS security.acme on the host. DOMAIN here must match
+      # site.acmeDomain in /etc/nixos/site.nix.
+      - /var/lib/acme/${DOMAIN}:/etc/caddy/certs:ro
     environment:
       - DOMAIN=${DOMAIN}
       - TZ=${TZ}
+    # Caddy runs as root in-container; add the caddy-certs GID so it can
+    # read the mode 0640 cert files (owned acme:caddy-certs on the host).
+    group_add:
+      - "2100"
     networks:
       - proxy
 
