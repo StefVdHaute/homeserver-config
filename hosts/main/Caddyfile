@@ -58,3 +58,11 @@ ntfy.{$DOMAIN} {
 	import acme_tls
 	reverse_proxy ntfy:80
 }
+
+# AdGuard Home admin UI (runs on the host as a NixOS service, not in
+# a container — reached via host.docker.internal; see extra_hosts in
+# hosts/main/compose/caddy.yml).
+adguard.{$DOMAIN} {
+	import acme_tls
+	reverse_proxy host.docker.internal:3000
+}

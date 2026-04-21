@@ -6,7 +6,7 @@ Scope: the dual-Xeon main server running all user-facing services (Seafile, Vaul
 
 - NixOS 25.11 live USB booted on the server
 - 4 storage drives + 1 boot SSD installed
-- Raspberry Pi backup host already set up (see [`hosts/backup/README.md`](../backup/README.md)) — needed for step 9
+- Raspberry Pi backup host already set up (see [`hosts/backup/README.md`](../backup/README.md)) — needed for step 11
 - A [Tailscale account](https://login.tailscale.com)
 
 ---
@@ -250,12 +250,70 @@ on first visit — accept the cert to proceed.
 
 ---
 
-## 10. Set up backups
+## 10. Set up AdGuard Home (network-wide DNS + ad-blocking)
+
+AdGuard Home runs as a NixOS service (enabled by the rebuild in step 6,
+not a Docker container). It listens for DNS on port 53 across the
+tailnet and LAN, and forwards non-blocked queries to Quad9 primary +
+Cloudflare secondary over DoT.
+
+### 10.1 Initial setup wizard
+
+1. Visit `https://adguard.DOMAIN` (proxied by Caddy to the host's UI
+   on `127.0.0.1:3000`).
+2. Walk through the setup wizard:
+   - **Admin interface**: leave defaults (already bound correctly by Nix).
+   - **DNS listener**: leave at port 53 on all interfaces.
+   - **Authentication**: create an admin username + password (the
+     wizard stores them in AdGuard's state file; declared as
+     `mutableSettings = true` so the UI owns user management).
+3. Under **Filters → DNS blocklists**, pick a reasonable starting set
+   — the AdGuard DNS filter is a fine default; add AdAway + EasyList
+   for more aggressive blocking.
+
+### 10.2 Point devices at AdGuard
+
+Two complementary paths:
+
+**Tailnet clients (phones/laptops on Tailscale):** open the Tailscale
+admin console → **DNS** → set *Global nameservers* to
+`homeserver`'s Tailscale IP (from `tailscale ip` on the server). All
+tailnet peers will use AdGuard automatically.
+
+**LAN devices (smart TV, guest phones, IoT not on the tailnet):** in
+your router's DHCP config, hand out `homeserver`'s LAN IP as the
+primary DNS server. Devices will pick it up on DHCP renewal.
+
+### 10.3 Verify
+
+On a device using AdGuard:
+
+```bash
+# Should show AdGuard as the resolver, and a blocked domain as 0.0.0.0
+dig doubleclick.net @<homeserver-ip>
+```
+
+The AdGuard UI's **Query log** shows every query in real-time; great
+for debugging when a site breaks ("what did it try to reach?").
+
+### 10.4 Troubleshooting
+
+- **AdGuard won't start / port 53 conflict** — another service on main
+  is bound to 53. Unlikely with our config (NetworkManager doesn't
+  listen on 53 by default), but check `sudo ss -tulpn | grep :53`.
+- **A site stops working after enabling a filter** — check the AdGuard
+  query log for blocked domains on that site; whitelist via the UI.
+- **Tailscale peers still using old DNS** — they cache the config.
+  Toggle Tailscale off/on once; or run `tailscale set --accept-dns=true`.
+
+---
+
+## 11. Set up backups
 
 Prerequisite: the `backupserver` Pi is already running and reachable
 via Tailscale (see [`hosts/backup/README.md`](../backup/README.md)).
 
-### 10.1 Write the env file
+### 11.1 Write the env file
 
 One file holds both the repository URL and the password, read by the
 restic systemd service at runtime:
@@ -271,7 +329,7 @@ EOF
 Save the `RESTIC_PASSWORD` value somewhere safe (e.g. Vaultwarden) —
 restores need it. `cat /etc/restic/env` to recover it once.
 
-### 10.2 Give root an SSH key for the Pi
+### 11.2 Give root an SSH key for the Pi
 
 The backup runs as root, so root needs an SSH key the Pi accepts:
 
@@ -282,7 +340,7 @@ sudo cat /root/.ssh/id_ed25519.pub
 # users.users.restic.openssh.authorizedKeys.keys, then rebuild the Pi
 ```
 
-### 10.3 Apply
+### 11.3 Apply
 
 ```bash
 sudo nixos-rebuild switch --flake ~/server_config#main
@@ -307,7 +365,7 @@ details.
 
 ---
 
-## 11. Connect your devices
+## 12. Connect your devices
 
 ### Seafile desktop sync
 
@@ -354,7 +412,7 @@ you don't need locally.
 
 ---
 
-## 12. Updates
+## 13. Updates
 
 ### How updates work
 
