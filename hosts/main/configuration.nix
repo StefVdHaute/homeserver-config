@@ -241,6 +241,37 @@ in
   systemd.services.restic-backups-seafile-data.unitConfig.OnFailure =
     [ "ntfy-backup-failure@restic-backups-seafile-data.service" ];
 
+  # Monthly deep integrity check. `restic check` runs after every backup
+  # and verifies structure/metadata; this timer additionally samples 10%
+  # of pack data (`--read-data-subset=10%`) and decrypts+rehashes it,
+  # catching bit-rot that the fast check can't. Over ~10 months the
+  # whole repo gets verified statistically.
+  #
+  # Bandwidth note: 10% flows over SFTP/Tailscale from main to the Pi.
+  # Fine on a LAN (Tailscale direct connect); if the Pi ever lives at a
+  # site with a slow uplink, dial the percentage down or go quarterly.
+  systemd.services.restic-check-deep = {
+    description = "Deep restic repository check (--read-data-subset=10%)";
+    path = [ pkgs.restic pkgs.openssh ];
+    serviceConfig = {
+      Type = "oneshot";
+      EnvironmentFile = "/etc/restic/env";
+      ExecStart = "${pkgs.restic}/bin/restic check --read-data-subset=10%";
+      ExecStartPost = "${ntfyNotify} home-backup 1 'Backup check OK' 'Monthly deep restic check passed (10% subset)'";
+      Nice = 19;
+      IOSchedulingClass = "idle";
+    };
+    unitConfig.OnFailure = [ "ntfy-backup-failure@restic-check-deep.service" ];
+  };
+  systemd.timers.restic-check-deep = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnCalendar = "monthly";        # first of every month
+      Persistent = true;
+      RandomizedDelaySec = "6h";     # avoid pinning to 00:00 + don't collide with daily 03:00 backup
+    };
+  };
+
   # ============================================================
   # Automatic Upgrades
   # ============================================================
