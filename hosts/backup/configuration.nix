@@ -6,29 +6,21 @@
 # Running other services here (Docker, edge-replicated services, etc.)
 # remains fine — they just must not touch the restic repo encryption keys.
 
-{ config, lib, pkgs, ... }:
-
-let
-  # Operator-alert helper. Reads the base URL of the ntfy server from
-  # /etc/ntfy/url (operator-managed, e.g. `https://ntfy.<tailnet>.ts.net`)
-  # and appends the topic.
-  #   ntfyNotify <topic> <priority> <title> <message>
-  ntfyNotify = pkgs.writeShellScript "ntfy-notify" ''
-    set -euo pipefail
-    topic="$1"; priority="$2"; title="$3"; message="$4"
-    base="$(cat /etc/ntfy/url)"
-    ${pkgs.curl}/bin/curl -fsS \
-      -H "Priority: $priority" \
-      -H "Title: $title" \
-      -d "$message" \
-      "$base/$topic" >/dev/null
-  '';
-in
+{ config, lib, pkgs, ntfyNotify, ... }:
 
 {
   imports = [
     ./hardware-configuration.nix
+    ../../modules/alerts.nix
   ];
+
+  # Operator alerts → main's ntfy, via tailnet Caddy. Base URL kept out of
+  # Nix (tailnet hostname is site-specific) and supplied by a one-line file.
+  alerts.ntfy.urlFile = "/etc/ntfy/url";
+  alerts.smartd = {
+    enable = true;
+    useDSat = true;   # USB-SATA bridge needs -d sat for SMART passthrough
+  };
 
   # ============================================================
   # Boot & Bootloader — Pi 4 uses extlinux
@@ -141,20 +133,6 @@ in
   ];
 
   # ============================================================
-  # SMART disk monitoring (alerts to ntfy /home-smart via main's Caddy)
-  # USB-SATA bridges usually need `-d sat` for SMART passthrough; verify
-  # with `sudo smartctl -a -d sat /dev/sda` after first boot.
-  # ============================================================
-  services.smartd = {
-    enable = true;
-    defaults.monitored = "-a -d sat -o on -s (S/../.././02|L/../../6/03) -M exec ${pkgs.writeShellScript "smartd-ntfy" ''
-      exec ${ntfyNotify} home-smart 4 \
-        "SMART alert: backupserver — $SMARTD_DEVICE" \
-        "$SMARTD_MESSAGE"
-    ''}";
-  };
-
-  # ============================================================
   # Automatic Upgrades
   # Runs daily at 05:30, but only when a recent restic snapshot has landed
   # (proof that main is alive and the backup pipeline is working).
@@ -192,21 +170,12 @@ in
 
   # ============================================================
   # Pi-side infra-failure alerts (→ ntfy /home-infra)
+  # The templated ntfy-infra-failure@.service lives in modules/alerts.nix.
   # ============================================================
 
-  # Templated notifier — %i = the failed unit's name. Reused by every
-  # unitConfig.OnFailure hook that should land on the home-infra topic.
-  systemd.services."ntfy-infra-failure@" = {
-    description = "Notify ntfy of failed Pi unit %i";
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = "${ntfyNotify} home-infra 4 'Pi alert' 'unit %i failed — run journalctl -u %i for details'";
-    };
-  };
-
-  # tailscaled daemon crash. Note: this only catches the daemon process
-  # dying. "Daemon up but tailnet unreachable" needs an active health
-  # check — tracked in TODO.md.
+  # tailscaled daemon crash. Only catches the daemon process dying;
+  # "daemon up but tailnet unreachable" needs an active health check
+  # (tracked in TODO.md).
   systemd.services.tailscaled.unitConfig.OnFailure =
     [ "ntfy-infra-failure@tailscaled.service" ];
 
