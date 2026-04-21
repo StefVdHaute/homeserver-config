@@ -16,7 +16,7 @@
 - [x] Container update monitoring (WUD)
 - [x] Configure WUD notification channel — HTTP trigger pointing at ntfy `home-updates`
 - [ ] Monitoring/alerting (Grafana + Prometheus + node-exporter)
-- [ ] DNS/local resolution (e.g. AdGuard Home or Pi-hole)
+- [x] DNS/local resolution — AdGuard Home as a NixOS service on main, tailnet + LAN, Quad9/Cloudflare DoT upstreams. UI at `adguard.DOMAIN`.
 - [ ] Log viewer (e.g. Dozzle)
 
 ## Future
