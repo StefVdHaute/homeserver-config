@@ -65,6 +65,7 @@ This file is the single source of truth for architecture, decisions, and the beh
 | Portainer | Container management web UI |
 | WUD | Container update monitoring (notify-only, no auto-updates); posts to ntfy `home-updates` |
 | ntfy | Self-hosted push-notification server for operator alerts (tailnet-only) |
+| AdGuard Home | Network-wide DNS + ad/tracker blocking (NixOS `services.adguardhome`, not a container). UI at `adguard.DOMAIN`; DNS on 53 reachable from tailnet + LAN. Upstream: Quad9 + Cloudflare over DoT. |
 
 Restic is not in the table above — it runs as a NixOS service (`services.restic.backups`), not a Docker container. See the Backup & Restore section below.
 
