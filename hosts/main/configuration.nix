@@ -1,6 +1,12 @@
 { config, pkgs, ntfyNotify, ... }:
 
 let
+  # Site-specific values kept out of git (operator creates this file
+  # before the first `nixos-rebuild switch`; see hosts/main/README.md).
+  # Expected shape:
+  #   { acmeDomain = "home.dedyn.io"; acmeEmail = "you@example.com"; }
+  site = import /etc/nixos/site.nix;
+
   # Shared options for every restic backup job on this host.
   # /etc/restic/env holds RESTIC_REPOSITORY= and RESTIC_PASSWORD=,
   # read by the service at runtime (expected repo:
@@ -32,6 +38,47 @@ in
   alerts.ntfy.url = "http://127.0.0.1:8085";
   alerts.smartd.enable = true;
   alerts.tailscaleHealthcheck.enable = true;
+
+  # ============================================================
+  # TLS certificates via Let's Encrypt DNS-01 ACME through deSEC.
+  # Produces a wildcard cert covering *.${site.acmeDomain} at
+  # /var/lib/acme/${site.acmeDomain}/. Caddy reads it via a read-only
+  # bind mount (see hosts/main/compose/caddy.yml + the `acme_tls`
+  # snippet in Caddyfile).
+  #
+  # DNS provider credentials live in /etc/acme/credentials.env
+  # (operator-managed, outside Nix, same pattern as /etc/restic/env and
+  # /etc/ntfy/url). For deSEC the file contains `DESEC_TOKEN=...`; if you
+  # ever switch providers, replace the variable name accordingly and
+  # flip `dnsProvider` below.
+  # ============================================================
+  security.acme = {
+    acceptTerms = true;
+    defaults.email = site.acmeEmail;
+  };
+  security.acme.certs.${site.acmeDomain} = {
+    domain = site.acmeDomain;
+    extraDomainNames = [ "*.${site.acmeDomain}" ];
+    dnsProvider = "desec";
+    credentialsFile = "/etc/acme/credentials.env";
+    group = "caddy-certs";
+    reloadServices = [ "caddy-reload-certs.service" ];
+  };
+
+  # Group the acme user and the Caddy container both belong to, so
+  # cert files (owned acme:caddy-certs, mode 0640) are readable by
+  # Caddy. Fixed GID so compose's `group_add: ["2100"]` matches.
+  users.groups.caddy-certs.gid = 2100;
+
+  # Restart Caddy after each renewal so new cert files take effect.
+  # `|| true` so renewal doesn't fail on first deploy before Caddy is up.
+  systemd.services.caddy-reload-certs = {
+    description = "Restart Caddy after ACME cert renewal";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${pkgs.bash}/bin/bash -c '${pkgs.docker}/bin/docker restart caddy || true'";
+    };
+  };
 
   # ============================================================
   # Boot & Bootloader

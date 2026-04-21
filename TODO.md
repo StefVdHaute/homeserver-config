@@ -30,9 +30,9 @@
 
 ## Security & Networking
 
-- [ ] HTTPS certs via Tailscale (`tailscale cert`) — replace Caddy's internal CA
+- [x] HTTPS certs for Caddy — went with Let's Encrypt via NixOS `security.acme` + deSEC DNS-01 instead of `tailscale cert` (the latter can't issue for subdomains of a tailnet hostname). Real trusted certs on every service URL.
 - [ ] Email sending / notification system for services (password resets, alerts)
-- [ ] Migrate `/etc/restic/env` and `/etc/ntfy/url` (and future secrets) to sops-nix or agenix
+- [ ] Migrate `/etc/restic/env`, `/etc/ntfy/url`, `/etc/acme/credentials.env`, and `/etc/nixos/site.nix` (and future secrets / site config) to sops-nix or agenix
 
 ## Pi-side alerts
 
