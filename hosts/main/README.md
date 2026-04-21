@@ -108,7 +108,7 @@ Edit `.env` and fill in all values:
 
 | Variable | What to set |
 |---|---|
-| `DOMAIN` | Your tailnet hostname (e.g. `homeserver.tail1234.ts.net`) or `homeserver.local` for LAN-only |
+| `DOMAIN` | Your deSEC subdomain (e.g. `home.dedyn.io`). MUST match `site.acmeDomain` in `/etc/nixos/site.nix` (step 6). `homeserver.local` still works for LAN-only testing with internal CA certs. |
 | `SEAFILE_MYSQL_ROOT_PASSWORD` | Strong random password |
 | `SEAFILE_MYSQL_DB_PASSWORD` | Strong random password (Seafile DB user) |
 | `SEAFILE_ADMIN_EMAIL` | Your admin email |
@@ -126,7 +126,75 @@ openssl rand -hex 16
 
 ---
 
-## 6. Create the Docker network
+## 6. Set up real TLS certs via deSEC + ACME DNS-01
+
+This gives every service a trusted Let's Encrypt cert (no "accept
+this certificate?" prompts on devices). Issuance and renewal are
+handled on the host by NixOS `security.acme`; Caddy just reads the
+resulting cert files.
+
+### 6.1 Sign up at deSEC
+
+1. Create a free account at <https://desec.io>, confirm the email.
+2. Under "DNS" → "My domains" → "Create new": register the subdomain
+   you used as `DOMAIN` (e.g. `home.dedyn.io`).
+3. Add a wildcard A record for your Tailscale IP:
+   - Subname: `*`
+   - Type: `A`
+   - Value: `homeserver`'s Tailscale IP (from `tailscale ip` on the
+     server).
+   - TTL: 3600 is fine.
+
+### 6.2 Generate a DNS API token
+
+1. Go to <https://desec.io/tokens> → "Create new token".
+2. Scope: restrict to "manage tokens" = off, "manage account" = off,
+   perm tokens for DNS = yes. (The default "DNS write" scope is fine.)
+3. Copy the token string — it's shown once.
+
+### 6.3 Write the operator-managed files on main
+
+Two files live outside Nix (not in git). Create them as root:
+
+```bash
+# Site-specific values read at nixos-rebuild time by configuration.nix
+sudo install -m 600 -o root -g root /dev/null /etc/nixos/site.nix
+sudo tee /etc/nixos/site.nix >/dev/null <<'EOF'
+{
+  acmeDomain = "home.dedyn.io";       # MUST match DOMAIN in hosts/main/.env
+  acmeEmail  = "you@example.com";     # for Let's Encrypt expiry reminders
+}
+EOF
+
+# DNS provider credentials read by the acme service at runtime
+sudo mkdir -p /etc/acme
+sudo install -m 600 -o root -g root /dev/null /etc/acme/credentials.env
+sudo tee /etc/acme/credentials.env >/dev/null <<'EOF'
+DESEC_TOKEN=<paste-your-desec-token-here>
+EOF
+```
+
+### 6.4 Apply
+
+```bash
+sudo nixos-rebuild switch --flake ~/server_config#main
+```
+
+First request may take a minute (deSEC propagation + Let's Encrypt
+validation). Verify:
+
+```bash
+systemctl status acme-<your-domain>.service      # should be "inactive (dead)" after success
+ls /var/lib/acme/<your-domain>/                   # cert.pem, key.pem, fullchain.pem, chain.pem
+```
+
+Once the files exist, the Caddy container on the next compose-up (or
+after the `caddy-reload-certs.service` fires on renewal) will serve
+real certs.
+
+---
+
+## 7. Create the Docker network
 
 All services share a single network for Caddy to reach them:
 
@@ -136,7 +204,7 @@ docker network create proxy
 
 ---
 
-## 7. Deploy services
+## 8. Deploy services
 
 Start Caddy first, then the rest in any order:
 
@@ -162,7 +230,7 @@ docker compose --env-file .env -f compose/wud.yml up -d
 
 ---
 
-## 8. Verify services
+## 9. Verify services
 
 Open these URLs (replace `DOMAIN` with your value from `.env`):
 
@@ -175,18 +243,19 @@ Open these URLs (replace `DOMAIN` with your value from `.env`):
 | WUD | `https://wud.DOMAIN` |
 | ntfy | `https://ntfy.DOMAIN` |
 
-If using `homeserver.local`, your browser will warn about Caddy's
-internal CA certificate on first visit — this is expected. Accept
-the certificate to proceed.
+With the deSEC ACME setup from step 6, certs are real Let's Encrypt
+ones and no warning should appear. If you're on the `homeserver.local`
+fallback instead, your browser will warn about Caddy's internal CA
+on first visit — accept the cert to proceed.
 
 ---
 
-## 9. Set up backups
+## 10. Set up backups
 
 Prerequisite: the `backupserver` Pi is already running and reachable
 via Tailscale (see [`hosts/backup/README.md`](../backup/README.md)).
 
-### 9.1 Write the env file
+### 10.1 Write the env file
 
 One file holds both the repository URL and the password, read by the
 restic systemd service at runtime:
@@ -202,7 +271,7 @@ EOF
 Save the `RESTIC_PASSWORD` value somewhere safe (e.g. Vaultwarden) —
 restores need it. `cat /etc/restic/env` to recover it once.
 
-### 9.2 Give root an SSH key for the Pi
+### 10.2 Give root an SSH key for the Pi
 
 The backup runs as root, so root needs an SSH key the Pi accepts:
 
@@ -213,7 +282,7 @@ sudo cat /root/.ssh/id_ed25519.pub
 # users.users.restic.openssh.authorizedKeys.keys, then rebuild the Pi
 ```
 
-### 9.3 Apply
+### 10.3 Apply
 
 ```bash
 sudo nixos-rebuild switch --flake ~/server_config#main
@@ -238,7 +307,7 @@ details.
 
 ---
 
-## 10. Connect your devices
+## 11. Connect your devices
 
 ### Seafile desktop sync
 
@@ -285,7 +354,7 @@ you don't need locally.
 
 ---
 
-## 11. Updates
+## 12. Updates
 
 ### How updates work
 
