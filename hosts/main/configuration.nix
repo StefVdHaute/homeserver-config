@@ -31,6 +31,7 @@ in
   # Operator alerts → local ntfy container (127.0.0.1:8085 via compose port map).
   alerts.ntfy.url = "http://127.0.0.1:8085";
   alerts.smartd.enable = true;
+  alerts.tailscaleHealthcheck.enable = true;
 
   # ============================================================
   # Boot & Bootloader

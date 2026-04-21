@@ -118,6 +118,8 @@ Producer → URL:
 | WUD container on main | `http://ntfy:80/home-updates` (Docker proxy network DNS) |
 | `smartd` on Pi | `$(cat /etc/ntfy/url)/home-smart` — `/etc/ntfy/url` on the Pi holds the base URL (operator-managed, outside git) |
 | Pi `OnFailure` hooks via `ntfy-infra-failure@.service` | `$(cat /etc/ntfy/url)/home-infra` — one templated unit, three wired units (`nixos-upgrade`, `tailscaled`, `mnt-backups.mount`) |
+| `tailscale-healthcheck.timer` on main | `http://127.0.0.1:8085/home-infra` — 15-min active check of `tailscale status --json` (`BackendState == Running` + `Self.Online`) |
+| `tailscale-healthcheck.timer` on Pi | `$(cat /etc/ntfy/url)/home-infra` — same check as main, complements the daemon-crash `OnFailure` hook |
 
 Caveat for the Pi's USB drive: SMART passthrough depends on the enclosure's UAS/SAT support. Verify once with `sudo smartctl -a -d sat /dev/sda` on first deploy. If the enclosure is opaque, replace it with one that isn't — there's no software workaround.
 
