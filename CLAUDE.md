@@ -40,7 +40,7 @@ This file is the single source of truth for architecture, decisions, and the beh
 
 - **Caddy** — single entry point for all web services (ports 80/443)
 - Subdomain-based routing (`seafile.DOMAIN`, `vaultwarden.DOMAIN`, etc.)
-- Automatic HTTPS via built-in internal CA (or Let's Encrypt with public domain)
+- HTTPS via real Let's Encrypt certs (wildcard) issued and renewed by NixOS `security.acme` on the host, using a DNS-01 ACME challenge through the deSEC DNS plugin. Caddy reads `cert.pem`/`key.pem` from `/var/lib/acme/${DOMAIN}/` via a read-only bind mount; a `caddy-reload-certs.service` restarts Caddy after each renewal. See `hosts/main/README.md` §6.
 
 ### Remote Access
 
@@ -122,6 +122,19 @@ Producer → URL:
 | `tailscale-healthcheck.timer` on Pi | `$(cat /etc/ntfy/url)/home-infra` — same check as main, complements the daemon-crash `OnFailure` hook |
 
 Caveat for the Pi's USB drive: SMART passthrough depends on the enclosure's UAS/SAT support. Verify once with `sudo smartctl -a -d sat /dev/sda` on first deploy. If the enclosure is opaque, replace it with one that isn't — there's no software workaround.
+
+### Operator-managed files outside git (main)
+
+Site-specific values and secrets that don't belong in Nix source live in operator-managed files. The main host expects:
+
+| File | Purpose | Format |
+|---|---|---|
+| `/etc/nixos/site.nix` | deSEC subdomain + ACME contact email; read at eval time by `hosts/main/configuration.nix` | Nix attrset: `{ acmeDomain = "..."; acmeEmail = "..."; }` |
+| `/etc/acme/credentials.env` | DNS provider API token used by `security.acme` | env file: `DESEC_TOKEN=...` |
+| `/etc/restic/env` | Restic repository URL + encryption password | env file: `RESTIC_REPOSITORY=...` / `RESTIC_PASSWORD=...` |
+| `hosts/main/.env` | Compose env vars (DOMAIN, service passwords, etc.); `DOMAIN` must match `site.acmeDomain` | env file |
+
+On the Pi, `/etc/ntfy/url` holds the base URL of main's ntfy server (see the Notifications section above).
 
 ---
 
