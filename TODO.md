@@ -37,7 +37,7 @@
 ## Pi-side alerts
 
 - [x] ntfy alerts from the Pi for: `nixos-upgrade` failure, `/mnt/backups` mount failure, `tailscaled` daemon crash — via `ntfy-infra-failure@.service` → `home-infra` topic.
-- [ ] Tailscale connectivity health check — `OnFailure` covers the daemon dying, not "daemon up but tailnet unreachable". Needs an active timer running `tailscale status --json` and alerting on non-Running state.
+- [x] Tailscale connectivity health check — 15-min `tailscale-healthcheck.timer` on both hosts checks `BackendState == Running` + `Self.Online`, alerts to `home-infra`. Implemented in `modules/alerts.nix` under the `alerts.tailscaleHealthcheck` option.
 
 ## Backup
 
