@@ -70,6 +70,15 @@ in
         '';
       };
     };
+
+    tailscaleHealthcheck = {
+      enable = lib.mkEnableOption ''
+        Active Tailscale connectivity healthcheck (complements the
+        OnFailure hook on tailscaled.service, which only catches daemon
+        crashes — this timer catches "daemon up but tailnet unreachable /
+        not authed / rekey stuck").
+      '';
+    };
   };
 
   config = lib.mkMerge [
@@ -112,6 +121,36 @@ in
             "SMART alert: ${config.networking.hostName} — $SMARTD_DEVICE" \
             "$SMARTD_MESSAGE"
         ''}";
+      };
+    })
+
+    (lib.mkIf cfg.tailscaleHealthcheck.enable {
+      systemd.services.tailscale-healthcheck = {
+        description = "Verify Tailscale connectivity (BackendState + Self.Online)";
+        path = [ pkgs.tailscale pkgs.jq ];
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = pkgs.writeShellScript "tailscale-healthcheck" ''
+            set -euo pipefail
+            status=$(tailscale status --json)
+            backend=$(echo "$status" | jq -r .BackendState)
+            online=$(echo "$status" | jq -r .Self.Online)
+            if [ "$backend" != "Running" ] || [ "$online" != "true" ]; then
+              ${ntfyNotify} home-infra 4 \
+                "Tailscale unhealthy on ${config.networking.hostName}" \
+                "BackendState=$backend Self.Online=$online"
+              exit 1
+            fi
+          '';
+        };
+      };
+      systemd.timers.tailscale-healthcheck = {
+        wantedBy = [ "timers.target" ];
+        timerConfig = {
+          OnBootSec = "5m";           # let tailscale settle after boot
+          OnUnitActiveSec = "15m";
+          Persistent = false;
+        };
       };
     })
   ];

@@ -21,6 +21,7 @@
     enable = true;
     useDSat = true;   # USB-SATA bridge needs -d sat for SMART passthrough
   };
+  alerts.tailscaleHealthcheck.enable = true;
 
   # ============================================================
   # Boot & Bootloader — Pi 4 uses extlinux
