@@ -42,7 +42,8 @@
 ## Backup
 
 - [x] Restic systemd timer schedule
-- [ ] Scheduled `restic check` and restore verification
+- [x] Scheduled `restic check` — monthly `restic-check-deep.timer` on main runs `--read-data-subset=10%`; alerts via ntfy on failure, silent success ping on `home-backup`.
+- [ ] Restore verification — periodic automated restore-to-scratch from the Pi to prove the chain end-to-end works. Post-deploy operational task; needs real data in the repo to be meaningful.
 - [x] A talk needs to happen for what the remote backup server will look like — designed as `hosts/backup/` (Raspberry Pi 4, btrfs on external USB SSD; see `CLAUDE.md`)
 
 ## Before deployment
