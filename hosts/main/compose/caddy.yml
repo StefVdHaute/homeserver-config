@@ -22,6 +22,11 @@ services:
     # read the mode 0640 cert files (owned acme:caddy-certs on the host).
     group_add:
       - "2100"
+    # Let Caddy reach NixOS services that run on the host (AdGuard UI at
+    # 127.0.0.1:3000). `host-gateway` resolves to the Docker bridge's
+    # host IP at runtime (Docker 20.10+).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - proxy
 

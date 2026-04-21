@@ -206,14 +206,55 @@ in
     enable = true;
     allowedTCPPorts = [
       22      # SSH
+      53      # DNS (AdGuard Home) — reachable on tailnet + LAN
       80      # HTTP  (Caddy)
       443     # HTTPS (Caddy)
     ];
     allowedUDPPorts = [
+      53      # DNS (AdGuard Home)
       41641   # Tailscale direct connections
     ];
     # Trust all traffic from Tailscale interface
     trustedInterfaces = [ "tailscale0" ];
+  };
+
+  # ============================================================
+  # DNS + ad-blocking (AdGuard Home)
+  # Web UI bound to 127.0.0.1:3000, fronted by Caddy at
+  # `adguard.${DOMAIN}`. DNS listens on 0.0.0.0:53; the firewall
+  # above opens 53 for tailnet + LAN reach.
+  #
+  # mutableSettings = true: declarative config seeds the first run,
+  # the AdGuard setup wizard creates the admin user, and the web UI
+  # owns state thereafter. If you want to enforce declarative-only,
+  # flip to false and declare users + filters explicitly.
+  # ============================================================
+  services.adguardhome = {
+    enable = true;
+    openFirewall = false;     # firewall above already opens 53
+    mutableSettings = true;
+    host = "127.0.0.1";
+    port = 3000;
+    settings = {
+      dns = {
+        bind_hosts = [ "0.0.0.0" ];
+        port = 53;
+        # Quad9 primary (adds malware-domain blocking), Cloudflare fallback.
+        # Both over DoT so AdGuard → upstream traffic is encrypted.
+        upstream_dns = [
+          "tls://dns.quad9.net"
+          "tls://1.1.1.1"
+        ];
+        # Plaintext resolvers used to bootstrap the DoT hostnames above.
+        bootstrap_dns = [ "9.9.9.9" "1.1.1.1" ];
+      };
+      filtering = {
+        protection_enabled = true;
+        filtering_enabled = true;
+      };
+      # Leave blocklists empty — pick them in the setup wizard on first run.
+      filters = [ ];
+    };
   };
 
   # ============================================================
