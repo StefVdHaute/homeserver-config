@@ -247,6 +247,8 @@ in
         ];
         # Plaintext resolvers used to bootstrap the DoT hostnames above.
         bootstrap_dns = [ "9.9.9.9" "1.1.1.1" ];
+        # Reject DNS answers with invalid DNSSEC signatures (catches tampering).
+        enable_dnssec = true;
       };
       filtering = {
         protection_enabled = true;
