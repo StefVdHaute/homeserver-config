@@ -18,6 +18,9 @@
 - [ ] Monitoring/alerting (Grafana + Prometheus + node-exporter)
 - [x] DNS/local resolution — AdGuard Home as a NixOS service on main, tailnet + LAN, Quad9/Cloudflare DoT upstreams. UI at `adguard.DOMAIN`.
 - [ ] Log viewer (e.g. Dozzle)
+- [ ] Uptime monitoring (Uptime Kuma / Gatus) — ideally on the Pi so it probes main from outside and catches network-side failures main can't self-report
+- [ ] Photo management (Immich) — phone camera-roll backup, replaces Google Photos
+- [ ] Dashboard / home page (Homepage / Heimdall / Dashy) — single landing page linking all services
 
 ## Future
 
