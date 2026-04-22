@@ -4,6 +4,7 @@
 
 - [x] Improve first deployment — restic is now declarative via `services.restic.backups`; install flow is nixos-anywhere + disko for both hosts (see each host's README §1)
 - [x] Check if the backup script can be replaced by something Nix-native — replaced with `services.restic.backups` in `hosts/main/configuration.nix`
+- [ ] Migrate inline `pkgs.writeShellScript` → `pkgs.writeShellApplication` across the repo — adds build-time shellcheck + `set -euo pipefail` defaults. Remaining call sites: `modules/alerts.nix` (`ntfyNotify`, `smartd-ntfy`, `tailscale-healthcheck`) and `hosts/backup/configuration.nix` (`backup-fresh` ExecCondition). `mdadmAlert` in `hosts/main/configuration.nix` is already on the new form.
 
 ## Infrastructure
 
@@ -45,6 +46,7 @@
 
 ## Backup
 
+- [ ] Automate the Pi `restic` user's authorized_keys — currently the main server's `/root/.ssh/id_ed25519.pub` is pasted by hand into `hosts/backup/configuration.nix` after main is installed (install-order dependency, main's root key doesn't exist until then). Options: ship via `nixos-anywhere --extra-files` on Pi redeploy, or add `resticHostPubkey` to `site.nix` and read via `keyFiles`.
 - [x] Restic systemd timer schedule
 - [x] Scheduled `restic check` — monthly `restic-check-deep.timer` on main runs `--read-data-subset=10%`; alerts via ntfy on failure, silent success ping on `home-backup`.
 - [ ] Restore verification — periodic automated restore-to-scratch from the Pi to prove the chain end-to-end works. Post-deploy operational task; needs real data in the repo to be meaningful.

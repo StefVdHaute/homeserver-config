@@ -6,7 +6,7 @@
 # Running other services here (Docker, edge-replicated services, etc.)
 # remains fine — they just must not touch the restic repo encryption keys.
 
-{ config, lib, pkgs, ntfyNotify, ... }:
+{ config, pkgs, ntfyNotify, ... }:
 
 {
   imports = [
@@ -24,17 +24,21 @@
   alerts.tailscaleHealthcheck.enable = true;
 
   # ============================================================
-  # Swap — 4GB swapfile on the external drive, not the SD card (SD wear)
-  # Boot/bootloader wiring and /mnt/backups are declared outside this file:
-  # bootloader comes from nixos-hardware.nixosModules.raspberry-pi-4,
-  # disk layout + /mnt/backups mount come from ./disko.nix.
+  # Swap — compressed in-RAM swap via zram. No disk wear (SD or USB),
+  # no btrfs-CoW gotcha that a swapfile on /mnt/backups would hit, and
+  # the Pi's workload (receiving SFTP pushes) rarely needs to swap out
+  # anyway. 50% of RAM as zstd-compressed swap gives effective ~100%
+  # RAM headroom on a Pi 4.
+  #
+  # Boot/bootloader wiring and /mnt/backups are declared outside this
+  # file: bootloader comes from nixos-hardware.nixosModules.raspberry-
+  # pi-4, disk layout + /mnt/backups mount come from ./disko.nix.
   # ============================================================
-  swapDevices = [
-    {
-      device = "/mnt/backups/.swapfile";
-      size = 4 * 1024; # MB
-    }
-  ];
+  zramSwap = {
+    enable = true;
+    algorithm = "zstd";
+    memoryPercent = 50;
+  };
 
   # ============================================================
   # Networking
@@ -51,20 +55,28 @@
   users.users.stef = {
     isNormalUser = true;
     extraGroups = [ "wheel" ];
-    openssh.authorizedKeys.keys = [
-      # TODO: paste your workstation's SSH pubkey here before first deploy
+    # Read the pubkey of whichever user runs nixos-anywhere (via $HOME
+    # at eval time) and bake it into the installed authorized_keys.
+    # With PasswordAuthentication=false below, SSH works immediately
+    # after first boot. Mirrors hosts/main/configuration.nix.
+    openssh.authorizedKeys.keyFiles = [
+      "${builtins.getEnv "HOME"}/.ssh/id_ed25519.pub"
     ];
   };
 
-  # Dedicated user for restic SFTP pushes from main
+  # Dedicated user for restic SFTP pushes from main. SFTP via OpenSSH's
+  # sftp-server subsystem does NOT invoke the user's shell, so nologin
+  # is safe; keeps an attacker with main's root key from getting an
+  # interactive shell on the Pi.
   users.users.restic = {
     isSystemUser = true;
     group = "restic";
     home = "/var/lib/restic";
     createHome = true;
-    shell = pkgs.bashInteractive; # SFTP via OpenSSH needs a real shell
+    shell = "${pkgs.util-linux}/bin/nologin";
     openssh.authorizedKeys.keys = [
-      # TODO: paste main server's ~/.ssh/id_ed25519.pub here before first deploy
+      # TODO: paste main server's /root/.ssh/id_ed25519.pub here before
+      # deploy. See TODO.md "Automate restic host pubkey on Pi".
     ];
   };
   users.groups.restic = { };
