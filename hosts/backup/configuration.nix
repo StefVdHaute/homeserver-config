@@ -141,7 +141,7 @@
     enable = true;
     allowReboot = true;
     dates = "05:30";
-    flake = "/home/stef/server_config#backup";
+    flake = "github:StefVdHaute/homeserver-config#backup";
     flags = [ "-L" ];
   };
 

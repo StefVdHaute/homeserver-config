@@ -342,7 +342,7 @@ in
     enable = true;
     allowReboot = false;
     dates = "04:30";
-    flake = "/home/stef/server_config#main";
+    flake = "github:StefVdHaute/homeserver-config#main";
     flags = [ "-L" ];
   };
 
