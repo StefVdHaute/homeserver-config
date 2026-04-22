@@ -63,15 +63,14 @@ sudo passwd stef                   # set a real password
 sudo tailscale up                  # follow the auth link
 ```
 
-After this the Pi is reachable as `backupserver.<tailnet>.ts.net` from any tailnet peer. Subsequent steps can all be done over that hostname.
+The Pi is now reachable as `backupserver.<tailnet>.ts.net` from any tailnet peer; subsequent steps can all be done over that hostname. State at this point:
 
-After this the Pi:
-- has `stef` and `restic` users with authorised keys
-- has `/mnt/backups` mounted from the external USB btrfs via disko
+- `stef` and `restic` users exist with authorised keys
+- `/mnt/backups` mounted from the external USB btrfs via disko
 - SSH only reachable over the tailnet (firewall blocks WAN/LAN)
 - `services.smartd` posts disk alerts to main's ntfy topic `home-smart`
 - `nixos-upgrade` runs daily at 05:30 but only when a restic snapshot has landed in the last 24h
-- posts `home-infra` alerts to ntfy on `nixos-upgrade`, `tailscaled`, or `mnt-backups.mount` failure (via the shared `ntfy-infra-failure@.service` template)
+- `OnFailure` hooks post `home-infra` alerts to ntfy for `nixos-upgrade`, `tailscaled`, or `mnt-backups.mount` failures (via the shared `ntfy-infra-failure@.service` template)
 
 ---
 
