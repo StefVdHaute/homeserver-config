@@ -2,9 +2,6 @@
 **/.env
 **/restic-env
 
-# Per-host hardware config — regenerated on each NixOS install
-hosts/*/hardware-configuration.nix
-
 # Nix build outputs
 result
 result-*
