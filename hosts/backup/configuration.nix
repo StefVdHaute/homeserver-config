@@ -24,23 +24,10 @@
   alerts.tailscaleHealthcheck.enable = true;
 
   # ============================================================
-  # Boot & Bootloader — Pi 4 uses extlinux
-  # ============================================================
-  boot.loader.grub.enable = false;
-  boot.loader.generic-extlinux-compatible.enable = true;
-
-  # ============================================================
-  # File Systems — /mnt/backups on the external btrfs USB drive
-  # SD-card root fs comes from hardware-configuration.nix (generated on-device)
-  # ============================================================
-  fileSystems."/mnt/backups" = {
-    device = "/dev/disk/by-label/backup-data";
-    fsType = "btrfs";
-    options = [ "compress=zstd:3" "noatime" "nofail" "subvol=@homeserver" ];
-  };
-
-  # ============================================================
   # Swap — 4GB swapfile on the external drive, not the SD card (SD wear)
+  # Boot/bootloader wiring and /mnt/backups are declared outside this file:
+  # bootloader comes from nixos-hardware.nixosModules.raspberry-pi-4,
+  # disk layout + /mnt/backups mount come from ./disko.nix.
   # ============================================================
   swapDevices = [
     {

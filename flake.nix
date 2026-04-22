@@ -8,9 +8,11 @@
       url = "github:nix-community/disko";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    nixos-hardware.url = "github:NixOS/nixos-hardware/master";
   };
 
-  outputs = { self, nixpkgs, disko, ... }: {
+  outputs = { self, nixpkgs, disko, nixos-hardware, ... }: {
     nixosConfigurations = {
       main = nixpkgs.lib.nixosSystem {
         system = "x86_64-linux";
@@ -23,7 +25,12 @@
 
       backup = nixpkgs.lib.nixosSystem {
         system = "aarch64-linux";
-        modules = [ ./hosts/backup/configuration.nix ];
+        modules = [
+          nixos-hardware.nixosModules.raspberry-pi-4
+          disko.nixosModules.disko
+          ./hosts/backup/disko.nix
+          ./hosts/backup/configuration.nix
+        ];
       };
     };
   };
