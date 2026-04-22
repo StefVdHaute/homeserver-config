@@ -17,15 +17,18 @@ let
   # `ntfyNotify <topic> <priority> <title> <message>`
   # The URL source is resolved at run time, not at eval time — either a
   # literal Nix string (main: localhost) or a file read from disk (Pi:
-  # operator-managed /etc/ntfy/url).
+  # operator-managed /etc/ntfy/url). `tr -d '\n'` strips the trailing
+  # newline that `tee <<<` / heredocs / most editors add; otherwise the
+  # composed URL would contain an embedded \n and curl would reject it.
   ntfyNotify = pkgs.writeShellScript "ntfy-notify" ''
     set -euo pipefail
     topic="$1"; priority="$2"; title="$3"; message="$4"
     ${if hasUrl
       then ''base="${cfg.ntfy.url}"''
-      else ''base="$(cat ${toString cfg.ntfy.urlFile})"''
+      else ''base="$(tr -d '\n' < ${toString cfg.ntfy.urlFile})"''
     }
     ${pkgs.curl}/bin/curl -fsS \
+      --connect-timeout 5 --max-time 10 \
       -H "Priority: $priority" \
       -H "Title: $title" \
       -d "$message" \
@@ -143,6 +146,10 @@ in
             fi
           '';
         };
+        # If the script itself errors out before reaching ntfyNotify (e.g.
+        # `tailscale status --json` fails because the socket is unreachable
+        # but the daemon process is still running), OnFailure catches it.
+        unitConfig.OnFailure = [ "ntfy-infra-failure@tailscale-healthcheck.service" ];
       };
       systemd.timers.tailscale-healthcheck = {
         wantedBy = [ "timers.target" ];
