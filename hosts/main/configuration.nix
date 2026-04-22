@@ -89,13 +89,18 @@ in
   # Caddy. Fixed GID so compose's `group_add: ["2100"]` matches.
   users.groups.caddy-certs.gid = 2100;
 
-  # Restart Caddy after each renewal so new cert files take effect.
-  # `|| true` so renewal doesn't fail on first deploy before Caddy is up.
+  # Restart Caddy after each renewal so new cert files take effect
+  # (Caddy reads certs at startup, not on SIGHUP). If the container
+  # isn't up yet (first install, before `docker compose up -d`), this
+  # unit fails — resolve by starting Caddy and re-running nixos-rebuild.
+  # Post-install, a real failure here marks the unit failed and shows
+  # up in `systemctl --failed`; we'd otherwise silently serve stale
+  # certs for up to 30 days until the old one expired.
   systemd.services.caddy-reload-certs = {
     description = "Restart Caddy after ACME cert renewal";
     serviceConfig = {
       Type = "oneshot";
-      ExecStart = "${pkgs.bash}/bin/bash -c '${pkgs.docker}/bin/docker restart caddy || true'";
+      ExecStart = "${pkgs.docker}/bin/docker restart caddy";
     };
   };
 
@@ -139,6 +144,14 @@ in
   users.users.stef = {
     isNormalUser = true;
     extraGroups = [ "wheel" "docker" ];
+    # Read the pubkey of whichever user runs nixos-anywhere (via
+    # $HOME at eval time) and bake it into the installed authorized_keys.
+    # With PasswordAuthentication=false below, SSH works immediately
+    # after first boot — no manual key-paste step. Requires --impure
+    # at eval time, which we already require for site.nix.
+    openssh.authorizedKeys.keyFiles = [
+      "${builtins.getEnv "HOME"}/.ssh/id_ed25519.pub"
+    ];
     # Set password on first boot with: passwd stef
   };
 
