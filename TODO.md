@@ -2,7 +2,7 @@
 
 ## Nix
 
-- [x] Improve first deployment — restic is now declarative via `services.restic.backups`
+- [x] Improve first deployment — restic is now declarative via `services.restic.backups`; install flow is nixos-anywhere + disko for both hosts (see each host's README §1)
 - [x] Check if the backup script can be replaced by something Nix-native — replaced with `services.restic.backups` in `hosts/main/configuration.nix`
 
 ## Infrastructure

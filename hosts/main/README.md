@@ -4,63 +4,74 @@ Scope: the dual-Xeon main server running all user-facing services (Seafile, Vaul
 
 ## Prerequisites
 
-- NixOS 25.11 live USB booted on the server
+- Any Linux with SSH-as-root booted on the target (Ubuntu live USB, NixOS installer ISO, minimal cloud image — nixos-anywhere kexecs into the NixOS installer from whatever's running)
 - 4 storage drives + 1 boot SSD installed
+- A workstation with Nix installed, holding this repo clone
 - Raspberry Pi backup host already set up (see [`hosts/backup/README.md`](../backup/README.md)) — needed for step 11
 - A [Tailscale account](https://login.tailscale.com)
 
 ---
 
-## 1. Install NixOS
+## 1. Install NixOS via nixos-anywhere + disko
 
-### 1.1 Partition and create RAID
+Disk layout (GPT on `/dev/sda` + mdadm RAID 10 across `/dev/sdb..e`) is declared in [`hosts/main/disko.nix`](./disko.nix); the platform stub in [`hosts/main/hardware-configuration.nix`](./hardware-configuration.nix) is committed. Install is a single command from your workstation.
 
-From the live installer, confirm your drive layout:
+### 1.1 On the workstation: create `/etc/nixos/site.nix`
+
+Per-site values (`acmeDomain` + `acmeEmail`) stay outside git but are read at Nix eval time, so the workstation running the install needs the file. Create it once per workstation:
+
+```bash
+sudo install -m 600 -o root -g root /dev/null /etc/nixos/site.nix
+sudo tee /etc/nixos/site.nix >/dev/null <<'EOF'
+{
+  acmeDomain = "home.dedyn.io";       # your deSEC subdomain
+  acmeEmail  = "you@example.com";     # Let's Encrypt contact
+}
+EOF
+```
+
+### 1.2 On the target: boot & confirm SSH
+
+Boot the live medium, enable SSH-as-root if the image doesn't already, and note the IP (`ip a`). Verify drive enumeration matches disko.nix (`/dev/sda` boot SSD, `/dev/sdb..sde` RAID spinners):
 
 ```bash
 lsblk
 ```
 
-Edit `raid-setup.sh` if your device names differ from `/dev/sda–sde`, then run:
+If device names differ, edit `hosts/main/disko.nix` on the workstation before installing. Disko wipes the listed disks — double-check.
+
+### 1.3 On the workstation: run nixos-anywhere
 
 ```bash
-bash raid-setup.sh
+nix run github:nix-community/nixos-anywhere -- \
+  --flake ~/server_config#main \
+  --target-host root@<target-ip>
 ```
 
-### 1.2 Mount and install
+Nixos-anywhere kexecs into the NixOS installer, runs disko to partition + format, installs the flake closure, and reboots the target into NixOS. Expect ~10–20 minutes depending on network.
+
+**Optional — ship operator-managed files at install time** with `--extra-files`:
 
 ```bash
-mount /dev/disk/by-label/nixos-root /mnt
-mkdir -p /mnt/boot
-mount /dev/disk/by-label/nixos-boot /mnt/boot
-mkdir -p /mnt/mnt/data
-mount /dev/disk/by-label/data /mnt/mnt/data
-swapon /dev/disk/by-label/nixos-swap
+mkdir -p /tmp/extra/etc/{acme,restic,nixos}
+sudo cp /etc/nixos/site.nix /tmp/extra/etc/nixos/
+sudo cp /etc/acme/credentials.env /tmp/extra/etc/acme/    # if you already have one
+# ...same for /etc/restic/env
+nix run github:nix-community/nixos-anywhere -- \
+  --flake ~/server_config#main \
+  --target-host root@<target-ip> \
+  --extra-files /tmp/extra
 ```
 
-Generate the per-host hardware config (stays local to the installed system, not in git):
+Otherwise, create these files on the target post-install (see §6.3, §11.1).
+
+### 1.4 First boot
+
+SSH back in via the tailnet hostname (once Tailscale is up — §3) or the LAN IP:
 
 ```bash
-nixos-generate-config --root /mnt --no-filesystems
-# Move it into this repo so the flake can find it:
-cp /mnt/etc/nixos/hardware-configuration.nix /mnt/root/server_config/hosts/main/
-```
-
-Install via the flake and reboot:
-
-```bash
-nixos-install --flake /mnt/root/server_config#main
-reboot
-```
-
-### 1.3 First boot
-
-```bash
-# Set your password
-passwd stef
-
-# Verify RAID is healthy
-cat /proc/mdstat
+passwd stef            # set a real password
+cat /proc/mdstat       # verify RAID 10 assembled healthy
 ```
 
 ---

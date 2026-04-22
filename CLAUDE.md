@@ -31,6 +31,7 @@ This file is the single source of truth for architecture, decisions, and the beh
 - Everything versioned in Git
 - Tailscale for secure remote access
 - Auto-upgrades daily (only after successful backup)
+- First install is **nixos-anywhere + disko** for both hosts — see each host's README §1. Disk layouts live in `hosts/<host>/disko.nix`; platform stubs in `hosts/<host>/hardware-configuration.nix` are committed hand-authored (not machine-generated).
 
 ---
 
@@ -158,13 +159,15 @@ On the Pi, `/etc/ntfy/url` holds the base URL of main's ntfy server (see the Not
 | `TODO.md` | Outstanding tasks |
 | `modules/alerts.nix` | Shared NixOS module: ntfy helper, smartd wiring, templated failure notifiers. Imported by both hosts. |
 | `hosts/main/configuration.nix` | Main host NixOS config (boot, RAID, Docker, SSH, Tailscale, firewall, auto-upgrade) |
-| `hosts/main/raid-setup.sh` | RAID 10 setup script for live installer |
+| `hosts/main/disko.nix` | Declarative disk layout: boot SSD (ESP + swap + ext4 root) + RAID 10 over 4 spinners |
+| `hosts/main/hardware-configuration.nix` | Hand-authored platform stub: initrd modules (incl. raid10/md_mod), kvm-intel, Intel microcode |
 | `hosts/main/Caddyfile` | Reverse proxy routes for all main-host services |
 | `hosts/main/.env.example` | Main-host environment variable template |
 | `hosts/main/compose/*.yml` | Docker Compose files (one per service) |
 | `hosts/main/README.md` | Main-host setup guide |
 | `hosts/backup/configuration.nix` | Pi backup-host NixOS config (aarch64, btrfs, firewall, heartbeat-gated auto-upgrade) |
-| `hosts/backup/disk-setup.sh` | btrfs format script for the external USB drive |
+| `hosts/backup/disko.nix` | Declarative disk layout: SD (FAT32 firmware + ext4 root) + external USB btrfs with `@homeserver` subvolume |
+| `hosts/backup/hardware-configuration.nix` | Hand-authored platform stub: aarch64, USB + MMC initrd modules |
 | `hosts/backup/README.md` | Pi backup-host setup guide |
 
 ---
