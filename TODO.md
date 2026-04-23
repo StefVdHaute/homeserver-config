@@ -22,6 +22,7 @@
 - [ ] Uptime monitoring (Uptime Kuma / Gatus) — ideally on the Pi so it probes main from outside and catches network-side failures main can't self-report
 - [ ] Photo management (Immich) — phone camera-roll backup, replaces Google Photos
 - [ ] Dashboard / home page (Homepage / Heimdall / Dashy) — single landing page linking all services
+- [ ] Self-hosted git forge (Forgejo / Gitea) — so `system.autoUpgrade.flake` can pull from a local server instead of `github:...`, removing GitHub as a runtime dependency for daily upgrades.
 
 ## Future
 

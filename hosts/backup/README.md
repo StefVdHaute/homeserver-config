@@ -30,7 +30,7 @@ Plug in the external USB drive. Disko will wipe both `/dev/mmcblk0` (SD) and `/d
 
 ## 2. Paste main's root pubkey into `hosts/backup/configuration.nix`
 
-**stef's pubkey** is already handled via `/etc/nixos/operator.pub` on the workstation (see main README §1.1), so no action there.
+**operator's pubkey** is already handled via `/etc/nixos/operator.pub` on the workstation (see main README §1.1), so no action there.
 
 **main's root pubkey** is still manual — it lets main push restic backups to the Pi over SFTP and can only be known after main is installed and its root key generated. On main: `sudo ssh-keygen -t ed25519 -f /root/.ssh/id_ed25519 -N ""` (if missing), then `sudo cat /root/.ssh/id_ed25519.pub`. Paste that under `users.users.restic.openssh.authorizedKeys.keys` in `hosts/backup/configuration.nix`, commit, and continue.
 
@@ -54,17 +54,17 @@ Nixos-anywhere kexecs into the NixOS installer, runs disko (SD gets GPT with FAT
 
 ## 4. First boot + Tailscale
 
-SSH in as `stef` on the LAN IP (keypair from §2 authorises you), then join the tailnet:
+SSH in as `operator` on the LAN IP (keypair from §2 authorises you), then join the tailnet:
 
 ```bash
-ssh stef@<pi-ip>
-sudo passwd stef                   # set a real password
+ssh operator@<pi-ip>
+sudo passwd operator                   # set a real password
 sudo tailscale up                  # follow the auth link
 ```
 
 The Pi is now reachable as `backupserver.<tailnet>.ts.net` from any tailnet peer; subsequent steps can all be done over that hostname. State at this point:
 
-- `stef` and `restic` users exist with authorised keys
+- `operator` and `restic` users exist with authorised keys
 - `/mnt/backups` mounted from the external USB btrfs via disko
 - SSH only reachable over the tailnet (firewall blocks WAN/LAN)
 - `services.smartd` posts disk alerts to main's ntfy topic `home-smart`
@@ -134,4 +134,4 @@ Online; no downtime. btrfs rebalances data + metadata to mirror across both devi
 - **`/mnt/backups` didn't mount after boot** — check `systemctl status mnt-backups.mount`. `nofail` in the fs options means the Pi boots anyway; the mount may have failed because the drive wasn't plugged in or the label doesn't match `backup-data`. Run `lsblk -f` to confirm the label.
 - **SSH refused from main** — confirm `tailscale status` on the Pi shows it as online, and that `homeserver`'s pubkey is in `authorized_keys` for `restic`. `sudo cat /var/lib/restic/.ssh/authorized_keys` on the Pi.
 - **nixos-upgrade skipped with "no restic snapshot newer than 24h"** — expected if backups are failing on main. Check `journalctl -u restic-backups-docker-volumes.service` and `journalctl -u restic-backups-seafile-data.service` on main first.
-- **Future: running Docker containers here** — flip `virtualisation.docker.enable = true;` in `hosts/backup/configuration.nix`, add `stef` to `extraGroups = [ "wheel" "docker" ]`, and add compose files under a new `hosts/backup/compose/` directory.
+- **Future: running Docker containers here** — flip `virtualisation.docker.enable = true;` in `hosts/backup/configuration.nix`, add `operator` to `extraGroups = [ "wheel" "docker" ]`, and add compose files under a new `hosts/backup/compose/` directory.

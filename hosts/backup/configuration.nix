@@ -52,7 +52,7 @@
   # ============================================================
   # Users
   # ============================================================
-  users.users.stef = {
+  users.users.operator = {
     isNormalUser = true;
     extraGroups = [ "wheel" ];
     # Operator pubkey comes in as `operatorPubkeyPath` via specialArgs

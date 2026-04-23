@@ -30,7 +30,7 @@ sudo tee /etc/nixos/site.nix >/dev/null <<'EOF'
 }
 EOF
 
-# SSH pubkey baked into stef's authorized_keys on both hosts
+# SSH pubkey baked into operator's authorized_keys on both hosts
 sudo cp ~/.ssh/id_ed25519.pub /etc/nixos/operator.pub
 ```
 
@@ -77,7 +77,7 @@ Otherwise, create these files on the target post-install (see §6.3, §11.1).
 SSH back in via the tailnet hostname (once Tailscale is up — §3) or the LAN IP:
 
 ```bash
-passwd stef            # set a real password
+passwd operator            # set a real password
 cat /proc/mdstat       # verify RAID 10 assembled healthy
 ```
 
@@ -87,7 +87,7 @@ cat /proc/mdstat       # verify RAID 10 assembled healthy
 
 ```bash
 sudo mkdir -p /mnt/data/{seafile,backups}
-sudo chown stef:users /mnt/data/{seafile,backups}
+sudo chown operator:users /mnt/data/{seafile,backups}
 ```
 
 ---
@@ -109,7 +109,7 @@ To use Tailscale MagicDNS as your domain, update `DOMAIN` in `.env`
 ## 4. Clone the repo
 
 ```bash
-cd /home/stef
+cd ~
 git clone <your-repo-url> server_config
 cd server_config
 ```

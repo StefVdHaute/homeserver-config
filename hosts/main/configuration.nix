@@ -141,14 +141,14 @@ in
   # ============================================================
   # Users
   # ============================================================
-  users.users.stef = {
+  users.users.operator = {
     isNormalUser = true;
     extraGroups = [ "wheel" "docker" ];
     # Operator pubkey comes in as `operatorPubkeyPath` via specialArgs
     # from flake.nix (declared as path input to /etc/nixos/operator.pub).
     # Pure eval throughout; SSH works immediately after first boot.
     openssh.authorizedKeys.keyFiles = [ operatorPubkeyPath ];
-    # Set password on first boot with: passwd stef
+    # Set password on first boot with: passwd operator
   };
 
   # ============================================================
