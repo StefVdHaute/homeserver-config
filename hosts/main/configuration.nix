@@ -346,7 +346,9 @@ in
     flags = [ "-L" ];
   };
 
-  # Only upgrade after both restic backup jobs succeeded today
+  # Only upgrade after both restic backup jobs succeeded today. The
+  # `requires` semantic means a failed restic (e.g. Pi unreachable)
+  # fails this unit too — no separate reachability check needed.
   systemd.services.nixos-upgrade = {
     after = [
       "restic-backups-docker-volumes.service"

@@ -145,13 +145,14 @@
     flags = [ "-L" ];
   };
 
-  # Skip the upgrade if no snapshot file on the backup repo has been written
-  # in the last 24h. This catches "main has been offline for a week" and
-  # "backups have been silently failing."
+  # Skip the upgrade if:
+  #   - no fresh restic snapshot (<24h) — backup pipeline / main offline, OR
+  #   - main's ntfy /v1/health is unreachable — main is degraded; don't
+  #     follow it into brokenness.
   systemd.services.nixos-upgrade = {
     serviceConfig.ExecCondition =
       let
-        script = pkgs.writeShellScript "backup-fresh" ''
+        script = pkgs.writeShellScript "nixos-upgrade-checks" ''
           snapdir=/mnt/backups/homeserver/snapshots
           if [ ! -d "$snapdir" ]; then
             echo "no backup repo yet — skipping upgrade"
@@ -160,6 +161,11 @@
           recent=$(find "$snapdir" -type f -newermt '-24 hours' -print -quit)
           if [ -z "$recent" ]; then
             echo "no restic snapshot newer than 24h — skipping upgrade"
+            exit 1
+          fi
+          base="$(tr -d '\n' < /etc/ntfy/url)"
+          if ! ${pkgs.curl}/bin/curl -fsS --connect-timeout 5 --max-time 10 "$base/v1/health" >/dev/null 2>&1; then
+            echo "main ntfy /v1/health unreachable — skipping upgrade"
             exit 1
           fi
           exit 0
