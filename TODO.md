@@ -37,6 +37,7 @@
 - [x] HTTPS certs for Caddy — went with Let's Encrypt via NixOS `security.acme` + deSEC DNS-01 instead of `tailscale cert` (the latter can't issue for subdomains of a tailnet hostname). Real trusted certs on every service URL.
 - [ ] Email sending / notification system for services (password resets, alerts)
 - [ ] Migrate `/etc/restic/env`, `/etc/ntfy/url`, `/etc/acme/credentials.env`, and `/etc/nixos/site.nix` (and future secrets / site config) to sops-nix or agenix
+- [ ] Harden ntfy auth if ever exposed beyond tailnet — add `NTFY_AUTH_DEFAULT_ACCESS=deny-all` + `NTFY_AUTH_FILE` + per-topic ACLs. Current design ("tailnet membership is the authentication") assumes tailnet-only reach.
 
 ## Pi-side alerts
 

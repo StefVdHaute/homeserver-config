@@ -29,6 +29,15 @@ services:
       - "host.docker.internal:host-gateway"
     networks:
       - proxy
+    # Caddy's admin API listens on 127.0.0.1:2019 inside the container
+    # by default; hitting /config/ confirms the process is alive and
+    # responding, not just that the port is open.
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:2019/config/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 volumes:
   caddy_data:
