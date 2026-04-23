@@ -131,7 +131,8 @@ Site-specific values and secrets that don't belong in Nix source live in operato
 
 | File | Purpose | Format |
 |---|---|---|
-| `/etc/nixos/site.nix` | deSEC subdomain + ACME contact email; read at eval time by `hosts/main/configuration.nix` | Nix attrset: `{ acmeDomain = "..."; acmeEmail = "..."; }` |
+| `/etc/nixos/site.nix` | deSEC subdomain + ACME contact email; declared as a `flake.nix` path input (`flake = false`), threaded in as `siteConfig` via specialArgs | Nix attrset: `{ acmeDomain = "..."; acmeEmail = "..."; }` |
+| `/etc/nixos/operator.pub` | SSH pubkey of whichever user installs; baked into `stef`'s `authorized_keys` on both hosts at eval time via `flake.nix` path input (`flake = false`) | OpenSSH pubkey, typically `cp ~/.ssh/id_ed25519.pub /etc/nixos/operator.pub` |
 | `/etc/acme/credentials.env` | DNS provider API token used by `security.acme` | env file: `DESEC_TOKEN=...` |
 | `/etc/restic/env` | Restic repository URL + encryption password | env file: `RESTIC_REPOSITORY=...` / `RESTIC_PASSWORD=...` |
 | `hosts/main/.env` | Compose env vars (DOMAIN, service passwords, etc.); `DOMAIN` must match `site.acmeDomain` | env file |

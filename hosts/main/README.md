@@ -16,11 +16,12 @@ Scope: the dual-Xeon main server running all user-facing services (Seafile, Vaul
 
 Disk layout (GPT on `/dev/sda` + mdadm RAID 10 across `/dev/sdb..e`) is declared in [`hosts/main/disko.nix`](./disko.nix); the platform stub in [`hosts/main/hardware-configuration.nix`](./hardware-configuration.nix) is committed. Install is a single command from your workstation.
 
-### 1.1 On the workstation: create `/etc/nixos/site.nix`
+### 1.1 On the workstation: create `/etc/nixos/site.nix` and `/etc/nixos/operator.pub`
 
-Per-site values (`acmeDomain` + `acmeEmail`) stay outside git but are read at Nix eval time, so the workstation running the install needs the file. Create it once per workstation:
+Two operator-managed files stay outside git but are pulled in by `flake.nix` as path inputs (so eval is pure — no `--impure` needed). Create both once per workstation that'll run `nixos-anywhere`:
 
 ```bash
+# Per-site values (domain + ACME email)
 sudo install -m 600 -o root -g root /dev/null /etc/nixos/site.nix
 sudo tee /etc/nixos/site.nix >/dev/null <<'EOF'
 {
@@ -28,7 +29,12 @@ sudo tee /etc/nixos/site.nix >/dev/null <<'EOF'
   acmeEmail  = "you@example.com";     # Let's Encrypt contact
 }
 EOF
+
+# SSH pubkey baked into stef's authorized_keys on both hosts
+sudo cp ~/.ssh/id_ed25519.pub /etc/nixos/operator.pub
 ```
+
+After creating or changing either file, run `nix flake lock` in the repo so `flake.lock` captures the updated narHash. (The lock change is part of your branch and commits normally.)
 
 ### 1.2 On the target: boot & confirm SSH
 
@@ -54,7 +60,6 @@ Nixos-anywhere kexecs into the NixOS installer, runs disko to partition + format
 
 ```bash
 mkdir -p /tmp/extra/etc/{acme,restic,nixos}
-sudo cp /etc/nixos/site.nix /tmp/extra/etc/nixos/
 sudo cp /etc/acme/credentials.env /tmp/extra/etc/acme/    # if you already have one
 # ...same for /etc/restic/env
 nix run github:nix-community/nixos-anywhere -- \
@@ -62,6 +67,8 @@ nix run github:nix-community/nixos-anywhere -- \
   --target-host root@<target-ip> \
   --extra-files /tmp/extra
 ```
+
+(Note: `site.nix` and `operator.pub` are already baked into the flake closure via path inputs, so they don't need shipping separately.)
 
 Otherwise, create these files on the target post-install (see §6.3, §11.1).
 

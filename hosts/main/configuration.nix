@@ -1,13 +1,13 @@
-{ config, pkgs, ntfyNotify, ... }:
+{ config, pkgs, ntfyNotify, siteConfig, operatorPubkeyPath, ... }:
 
 let
-  # Per-site values (deSEC subdomain + ACME email). Operator-managed,
-  # outside the repo. Expected shape:
+  # Per-site values come in as `siteConfig` via specialArgs from flake.nix
+  # (the flake declares `site` as a path input to /etc/nixos/site.nix).
+  # Expected shape:
   #   { acmeDomain = "home.dedyn.io"; acmeEmail = "you@example.com"; }
-  # For nixos-anywhere installs this file must exist ON THE WORKSTATION
-  # running the install (flake eval happens there before the target
-  # exists), not on the target. See hosts/main/README.md.
-  site = import /etc/nixos/site.nix;
+  # The file must exist on whichever workstation runs `nixos-anywhere`.
+  # See hosts/main/README.md.
+  site = siteConfig;
 
   # Shared options for every restic backup job on this host.
   # /etc/restic/env holds RESTIC_REPOSITORY= and RESTIC_PASSWORD=,
@@ -144,14 +144,10 @@ in
   users.users.stef = {
     isNormalUser = true;
     extraGroups = [ "wheel" "docker" ];
-    # Read the pubkey of whichever user runs nixos-anywhere (via
-    # $HOME at eval time) and bake it into the installed authorized_keys.
-    # With PasswordAuthentication=false below, SSH works immediately
-    # after first boot — no manual key-paste step. Requires --impure
-    # at eval time, which we already require for site.nix.
-    openssh.authorizedKeys.keyFiles = [
-      "${builtins.getEnv "HOME"}/.ssh/id_ed25519.pub"
-    ];
+    # Operator pubkey comes in as `operatorPubkeyPath` via specialArgs
+    # from flake.nix (declared as path input to /etc/nixos/operator.pub).
+    # Pure eval throughout; SSH works immediately after first boot.
+    openssh.authorizedKeys.keyFiles = [ operatorPubkeyPath ];
     # Set password on first boot with: passwd stef
   };
 

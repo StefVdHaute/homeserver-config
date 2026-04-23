@@ -52,11 +52,39 @@
         "type": "github"
       }
     },
+    "operatorPubkey": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1776978846,
+        "narHash": "sha256-JU/lRCwOmT5DEQ9ZOJn7gIGPXobV1VD7PDWydMEMZYw=",
+        "path": "/etc/nixos/operator.pub",
+        "type": "path"
+      },
+      "original": {
+        "path": "/etc/nixos/operator.pub",
+        "type": "path"
+      }
+    },
     "root": {
       "inputs": {
         "disko": "disko",
         "nixos-hardware": "nixos-hardware",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "operatorPubkey": "operatorPubkey",
+        "site": "site"
+      }
+    },
+    "site": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1776887615,
+        "narHash": "sha256-/5jeoJ6aM3xHXfD92vUdPvNmdZSOE8K93gqaITTuwl0=",
+        "path": "/etc/nixos/site.nix",
+        "type": "path"
+      },
+      "original": {
+        "path": "/etc/nixos/site.nix",
+        "type": "path"
       }
     }
   },

@@ -28,12 +28,11 @@ Plug in the external USB drive. Disko will wipe both `/dev/mmcblk0` (SD) and `/d
 
 ---
 
-## 2. Paste SSH pubkeys into `hosts/backup/configuration.nix`
+## 2. Paste main's root pubkey into `hosts/backup/configuration.nix`
 
-Two keys, pasted into `users.users.<name>.openssh.authorizedKeys.keys` on the workstation before installing:
+**stef's pubkey** is already handled via `/etc/nixos/operator.pub` on the workstation (see main README §1.1), so no action there.
 
-- **Your workstation's key** under `users.users.stef` — lets you SSH into the Pi for ops.
-- **`homeserver`'s root key** under `users.users.restic` — lets main push restic backups over SFTP. On main: `sudo cat /root/.ssh/id_ed25519.pub` (generate first with `sudo ssh-keygen -t ed25519 -f /root/.ssh/id_ed25519 -N ""` if missing).
+**main's root pubkey** is still manual — it lets main push restic backups to the Pi over SFTP and can only be known after main is installed and its root key generated. On main: `sudo ssh-keygen -t ed25519 -f /root/.ssh/id_ed25519 -N ""` (if missing), then `sudo cat /root/.ssh/id_ed25519.pub`. Paste that under `users.users.restic.openssh.authorizedKeys.keys` in `hosts/backup/configuration.nix`, commit, and continue.
 
 ---
 

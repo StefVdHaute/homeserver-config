@@ -55,6 +55,6 @@
 
 ## Before deployment
 
-- [ ] Review all files one by one with help of claude to check for security/configuration problems
+- [x] Review all files one by one with help of claude to check for security/configuration problems — done, findings landed as individual commits
 - [ ] Create a plan for first deployment success review and to prepare for integration hell
 - [x] Recreate this deployment on a smaller scale for the remote Raspberry pi — see `hosts/backup/`

@@ -6,7 +6,7 @@
 # Running other services here (Docker, edge-replicated services, etc.)
 # remains fine — they just must not touch the restic repo encryption keys.
 
-{ config, pkgs, ntfyNotify, ... }:
+{ config, pkgs, ntfyNotify, operatorPubkeyPath, ... }:
 
 {
   imports = [
@@ -55,13 +55,10 @@
   users.users.stef = {
     isNormalUser = true;
     extraGroups = [ "wheel" ];
-    # Read the pubkey of whichever user runs nixos-anywhere (via $HOME
-    # at eval time) and bake it into the installed authorized_keys.
-    # With PasswordAuthentication=false below, SSH works immediately
-    # after first boot. Mirrors hosts/main/configuration.nix.
-    openssh.authorizedKeys.keyFiles = [
-      "${builtins.getEnv "HOME"}/.ssh/id_ed25519.pub"
-    ];
+    # Operator pubkey comes in as `operatorPubkeyPath` via specialArgs
+    # from flake.nix (path input to /etc/nixos/operator.pub). Pure eval;
+    # SSH works immediately after first boot. Mirrors main.
+    openssh.authorizedKeys.keyFiles = [ operatorPubkeyPath ];
   };
 
   # Dedicated user for restic SFTP pushes from main. SFTP via OpenSSH's
