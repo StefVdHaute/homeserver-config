@@ -4,7 +4,7 @@
 
 - [x] Improve first deployment — restic is now declarative via `services.restic.backups`; install flow is nixos-anywhere + disko for both hosts (see each host's README §1)
 - [x] Check if the backup script can be replaced by something Nix-native — replaced with `services.restic.backups` in `hosts/main/configuration.nix`
-- [ ] Migrate inline `pkgs.writeShellScript` → `pkgs.writeShellApplication` across the repo — adds build-time shellcheck + `set -euo pipefail` defaults. Remaining call sites: `modules/alerts.nix` (`ntfyNotify`, `smartd-ntfy`, `tailscale-healthcheck`) and `hosts/backup/configuration.nix` (`backup-fresh` ExecCondition). `mdadmAlert` in `hosts/main/configuration.nix` is already on the new form.
+- [x] Migrate inline `pkgs.writeShellScript` → `pkgs.writeShellApplication` across the repo — done; all call sites (`ntfyNotify`, `smartd-ntfy`, `tailscale-healthcheck`, `nixos-upgrade-checks`, `mdadmAlert`) now on the new form with build-time shellcheck.
 
 ## Infrastructure
 
