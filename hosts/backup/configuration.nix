@@ -143,32 +143,37 @@
   };
 
   # Skip the upgrade if:
+  #   - the backup repo dir doesn't exist (first-install state; systemd's
+  #     ConditionPathIsDirectory skips the unit silently — the underlying
+  #     cause, a failed /mnt/backups mount, alerts separately via the
+  #     mnt-backups.mount OnFailure drop-in below), OR
   #   - no fresh restic snapshot (<24h) — backup pipeline / main offline, OR
   #   - main's ntfy /v1/health is unreachable — main is degraded; don't
   #     follow it into brokenness.
   systemd.services.nixos-upgrade = {
+    unitConfig = {
+      ConditionPathIsDirectory = "/mnt/backups/homeserver/snapshots";
+      OnFailure = [ "ntfy-infra-failure@nixos-upgrade.service" ];
+    };
     serviceConfig.ExecCondition =
       let
-        script = pkgs.writeShellScript "nixos-upgrade-checks" ''
-          snapdir=/mnt/backups/homeserver/snapshots
-          if [ ! -d "$snapdir" ]; then
-            echo "no backup repo yet — skipping upgrade"
-            exit 1
-          fi
-          recent=$(find "$snapdir" -type f -newermt '-24 hours' -print -quit)
-          if [ -z "$recent" ]; then
-            echo "no restic snapshot newer than 24h — skipping upgrade"
-            exit 1
-          fi
-          base="$(tr -d '\n' < /etc/ntfy/url)"
-          if ! ${pkgs.curl}/bin/curl -fsS --connect-timeout 5 --max-time 10 "$base/v1/health" >/dev/null 2>&1; then
-            echo "main ntfy /v1/health unreachable — skipping upgrade"
-            exit 1
-          fi
-          exit 0
-        '';
-      in "${script}";
-    unitConfig.OnFailure = [ "ntfy-infra-failure@nixos-upgrade.service" ];
+        script = pkgs.writeShellApplication {
+          name = "nixos-upgrade-checks";
+          runtimeInputs = [ pkgs.findutils pkgs.curl pkgs.coreutils ];
+          text = ''
+            recent=$(find /mnt/backups/homeserver/snapshots -type f -newermt '-24 hours' -print -quit)
+            if [ -z "$recent" ]; then
+              echo "no restic snapshot newer than 24h — skipping upgrade"
+              exit 1
+            fi
+            base="$(tr -d '\n' < /etc/ntfy/url)"
+            if ! curl -fsS --connect-timeout 5 --max-time 10 "$base/v1/health" >/dev/null 2>&1; then
+              echo "main ntfy /v1/health unreachable — skipping upgrade"
+              exit 1
+            fi
+          '';
+        };
+      in "${script}/bin/nixos-upgrade-checks";
   };
 
   # ============================================================

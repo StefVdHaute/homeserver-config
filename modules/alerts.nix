@@ -20,20 +20,27 @@ let
   # operator-managed /etc/ntfy/url). `tr -d '\n'` strips the trailing
   # newline that `tee <<<` / heredocs / most editors add; otherwise the
   # composed URL would contain an embedded \n and curl would reject it.
-  ntfyNotify = pkgs.writeShellScript "ntfy-notify" ''
-    set -euo pipefail
-    topic="$1"; priority="$2"; title="$3"; message="$4"
-    ${if hasUrl
-      then ''base="${cfg.ntfy.url}"''
-      else ''base="$(tr -d '\n' < ${toString cfg.ntfy.urlFile})"''
-    }
-    ${pkgs.curl}/bin/curl -fsS \
-      --connect-timeout 5 --max-time 10 \
-      -H "Priority: $priority" \
-      -H "Title: $title" \
-      -d "$message" \
-      "$base/$topic" >/dev/null
-  '';
+  # writeShellApplication adds `set -euo pipefail` + shellcheck at build.
+  ntfyNotifyPkg = pkgs.writeShellApplication {
+    name = "ntfy-notify";
+    runtimeInputs = [ pkgs.curl pkgs.coreutils ];
+    text = ''
+      topic="$1"; priority="$2"; title="$3"; message="$4"
+      ${if hasUrl
+        then ''base="${cfg.ntfy.url}"''
+        else ''base="$(tr -d '\n' < ${toString cfg.ntfy.urlFile})"''
+      }
+      curl -fsS \
+        --connect-timeout 5 --max-time 10 \
+        -H "Priority: $priority" \
+        -H "Title: $title" \
+        -d "$message" \
+        "$base/$topic" >/dev/null
+    '';
+  };
+  # Keep `ntfyNotify` as a callable-path string so downstream callers
+  # (${ntfyNotify} ...) don't care about the migration.
+  ntfyNotify = "${ntfyNotifyPkg}/bin/ntfy-notify";
 in
 
 {
@@ -116,25 +123,30 @@ in
       };
     }
 
-    (lib.mkIf cfg.smartd.enable {
-      services.smartd = {
-        enable = true;
-        defaults.monitored = "-a${lib.optionalString cfg.smartd.useDSat " -d sat"} -o on -s (S/../.././02|L/../../6/03) -M exec ${pkgs.writeShellScript "smartd-ntfy" ''
-          exec ${ntfyNotify} home-smart 4 \
-            "SMART alert: ${config.networking.hostName} — $SMARTD_DEVICE" \
-            "$SMARTD_MESSAGE"
-        ''}";
-      };
-    })
+    (lib.mkIf cfg.smartd.enable (
+      let
+        smartdNtfy = pkgs.writeShellApplication {
+          name = "smartd-ntfy";
+          text = ''
+            exec ${ntfyNotify} home-smart 4 \
+              "SMART alert: ${config.networking.hostName} — $SMARTD_DEVICE" \
+              "$SMARTD_MESSAGE"
+          '';
+        };
+      in {
+        services.smartd = {
+          enable = true;
+          defaults.monitored = "-a${lib.optionalString cfg.smartd.useDSat " -d sat"} -o on -s (S/../.././02|L/../../6/03) -M exec ${smartdNtfy}/bin/smartd-ntfy";
+        };
+      }
+    ))
 
-    (lib.mkIf cfg.tailscaleHealthcheck.enable {
-      systemd.services.tailscale-healthcheck = {
-        description = "Verify Tailscale connectivity (BackendState + Self.Online)";
-        path = [ pkgs.tailscale pkgs.jq ];
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = pkgs.writeShellScript "tailscale-healthcheck" ''
-            set -euo pipefail
+    (lib.mkIf cfg.tailscaleHealthcheck.enable (
+      let
+        tailscaleHealthcheck = pkgs.writeShellApplication {
+          name = "tailscale-healthcheck";
+          runtimeInputs = [ pkgs.tailscale pkgs.jq ];
+          text = ''
             status=$(tailscale status --json)
             backend=$(echo "$status" | jq -r .BackendState)
             online=$(echo "$status" | jq -r .Self.Online)
@@ -145,6 +157,13 @@ in
               exit 1
             fi
           '';
+        };
+      in {
+      systemd.services.tailscale-healthcheck = {
+        description = "Verify Tailscale connectivity (BackendState + Self.Online)";
+        serviceConfig = {
+          Type = "oneshot";
+          ExecStart = "${tailscaleHealthcheck}/bin/tailscale-healthcheck";
         };
         # If the script itself errors out before reaching ntfyNotify (e.g.
         # `tailscale status --json` fails because the socket is unreachable
@@ -159,6 +178,6 @@ in
           Persistent = false;
         };
       };
-    })
+    }))
   ];
 }
