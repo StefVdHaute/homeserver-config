@@ -16,9 +16,22 @@
 	tls /etc/caddy/certs/cert.pem /etc/caddy/certs/key.pem
 }
 
+# Defense-in-depth headers — imported by every vhost below. Covers the
+# authenticated-tailnet-peer-compromise case that tailnet-only access
+# alone doesn't.
+(secure_headers) {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+	}
+}
+
 # Seafile
 seafile.{$DOMAIN} {
 	import acme_tls
+	import secure_headers
 	reverse_proxy seafile:80
 	request_body {
 		max_size 10G
@@ -28,34 +41,38 @@ seafile.{$DOMAIN} {
 # Vaultwarden
 vaultwarden.{$DOMAIN} {
 	import acme_tls
+	import secure_headers
 	reverse_proxy vaultwarden:80
 }
 
 # Joplin
 joplin.{$DOMAIN} {
 	import acme_tls
+	import secure_headers
 	reverse_proxy joplin:22300
 }
 
-# Portainer
+# Portainer — HTTP upstream over the private Docker `proxy` network.
+# The container exposes both 9000 (HTTP) and 9443 (self-signed HTTPS);
+# proxying over HTTPS with tls_insecure_skip_verify was unauthenticated
+# TLS (cert never verified), not real protection.
 portainer.{$DOMAIN} {
 	import acme_tls
-	reverse_proxy portainer:9443 {
-		transport http {
-			tls_insecure_skip_verify
-		}
-	}
+	import secure_headers
+	reverse_proxy portainer:9000
 }
 
 # WUD (What's Up Docker)
 wud.{$DOMAIN} {
 	import acme_tls
+	import secure_headers
 	reverse_proxy wud:3000
 }
 
 # ntfy (push notifications for operator alerts)
 ntfy.{$DOMAIN} {
 	import acme_tls
+	import secure_headers
 	reverse_proxy ntfy:80
 }
 
@@ -64,5 +81,6 @@ ntfy.{$DOMAIN} {
 # hosts/main/compose/caddy.yml).
 adguard.{$DOMAIN} {
 	import acme_tls
+	import secure_headers
 	reverse_proxy host.docker.internal:3000
 }
