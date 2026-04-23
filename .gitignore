@@ -1,6 +1,5 @@
 # Secrets (any host, any depth)
 **/.env
-**/restic-env
 
 # Nix build outputs
 result
