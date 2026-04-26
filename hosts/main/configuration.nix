@@ -1,4 +1,4 @@
-{ config, pkgs, ntfyNotify, siteConfig, operatorPubkeyPath, ... }:
+{ config, lib, pkgs, ntfyNotify, siteConfig, operatorPubkeyPath, ... }:
 
 let
   # Per-site values come in as `siteConfig` via specialArgs from flake.nix
@@ -26,6 +26,7 @@ let
       "--keep-monthly 6"
     ];
     checkOpts = [ ];   # empty = structural check every run, no --read-data
+    extraBackupArgs = [ "--compression" "max" ];
   };
 
   # mdadm invokes this on array events with argv: event, array, [device].
@@ -155,6 +156,29 @@ in
   '';
 
   # ============================================================
+  # Maintenance
+  # ============================================================
+  # Monthly btrfs scrub catches bit-rot proactively; mdadm RAID 10
+  # provides the redundancy needed to repair detected errors on
+  # /mnt/data. Boot SSD has no redundancy — scrub still surfaces the
+  # bad block in the journal so it can be replaced.
+  services.btrfs.autoScrub = {
+    enable = true;
+    interval = "monthly";
+    fileSystems = [ "/" "/mnt/data" ];
+  };
+
+  # Garbage-collect old store paths weekly + hard-link duplicates so
+  # /nix/store doesn't grow unbounded. 30d keeps plenty of NixOS
+  # generations for rollback while reclaiming long-stale derivations.
+  nix.gc = {
+    automatic = true;
+    dates = "weekly";
+    options = "--delete-older-than 30d";
+  };
+  nix.optimise.automatic = true;
+
+  # ============================================================
   # Networking
   # ============================================================
   networking.hostName = "homeserver";
@@ -192,6 +216,13 @@ in
     # Store Docker data on the RAID array, not the boot SSD
     daemon.settings = {
       data-root = "/mnt/data/docker";
+      # Cap container stdout per file (10MB × 3 = 30MB max per
+      # container) so a chatty service can't fill the data array.
+      log-driver = "json-file";
+      log-opts = {
+        max-size = "10m";
+        max-file = "3";
+      };
     };
   };
 
@@ -297,12 +328,12 @@ in
     docker-volumes = resticCommon // {
       paths = [ "/mnt/data/docker/volumes" ];
       exclude = [ "*.tmp" "*.log" ];
-      extraBackupArgs = [ "--tag" "docker-volumes" ];
+      extraBackupArgs = resticCommon.extraBackupArgs ++ [ "--tag" "docker-volumes" ];
       backupCleanupCommand = "${ntfyNotify} home-backup 1 'Backup OK' 'docker-volumes snapshot completed'";
     };
     seafile-data = resticCommon // {
       paths = [ "/mnt/data/seafile" ];
-      extraBackupArgs = [ "--tag" "seafile-data" ];
+      extraBackupArgs = resticCommon.extraBackupArgs ++ [ "--tag" "seafile-data" ];
       backupCleanupCommand = "${ntfyNotify} home-backup 1 'Backup OK' 'seafile-data snapshot completed'";
     };
     # AdGuard Home's state (admin user, selected blocklists, custom rules)
@@ -314,7 +345,7 @@ in
     # `chown -R` to the current owning UID may be needed before restart.
     adguard-state = resticCommon // {
       paths = [ "/var/lib/AdGuardHome" ];
-      extraBackupArgs = [ "--tag" "adguard-state" ];
+      extraBackupArgs = resticCommon.extraBackupArgs ++ [ "--tag" "adguard-state" ];
       backupCleanupCommand = "${ntfyNotify} home-backup 1 'Backup OK' 'adguard-state snapshot completed'";
     };
   };

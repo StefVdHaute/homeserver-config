@@ -41,6 +41,26 @@
   };
 
   # ============================================================
+  # Maintenance
+  # ============================================================
+  # Monthly btrfs scrub catches bit-rot proactively. Single-drive on
+  # both /, and (currently) /mnt/backups — scrub still surfaces bad
+  # blocks in the journal even without redundancy to repair from.
+  services.btrfs.autoScrub = {
+    enable = true;
+    interval = "monthly";
+    fileSystems = [ "/" "/mnt/backups" ];
+  };
+
+  # Garbage-collect old store paths weekly + hard-link duplicates.
+  nix.gc = {
+    automatic = true;
+    dates = "weekly";
+    options = "--delete-older-than 30d";
+  };
+  nix.optimise.automatic = true;
+
+  # ============================================================
   # Networking
   # ============================================================
   networking.hostName = "backupserver";
