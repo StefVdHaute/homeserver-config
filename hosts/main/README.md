@@ -7,22 +7,24 @@ Scope: the dual-Xeon main server running all user-facing services (Seafile, Vaul
 - Any Linux with SSH-as-root booted on the target (Ubuntu live USB, NixOS installer ISO, minimal cloud image — nixos-anywhere kexecs into the NixOS installer from whatever's running)
 - 4 storage drives + 1 boot SSD installed
 - A workstation with Nix installed, holding this repo clone
-- Raspberry Pi backup host already set up (see [`hosts/backup/README.md`](../backup/README.md)) — needed for step 11
+- Raspberry Pi backup host already set up (see [`hosts/backup/README.md`](../backup/README.md)) — needed for §10 (verify backups)
 - A [Tailscale account](https://login.tailscale.com)
 
 ---
 
 ## 1. Install NixOS via nixos-anywhere + disko
 
-Disk layout (GPT on `/dev/sda` + mdadm RAID 10 across `/dev/sdb..e`) is declared in [`hosts/main/disko.nix`](./disko.nix); the platform stub in [`hosts/main/hardware-configuration.nix`](./hardware-configuration.nix) is committed. Install is a single command from your workstation.
+Disk layout (GPT on `/dev/sda` + mdadm RAID 10 across `/dev/sdb..e`) is declared in [`hosts/main/disko.nix`](./disko.nix); the platform stub in [`hosts/main/hardware-configuration.nix`](./hardware-configuration.nix) is committed. Install is a single command from your workstation, plus a one-time setup of operator-managed files + agenix-encrypted secrets.
 
-### 1.1 On the workstation: create `/etc/nixos/site.nix` and `/etc/nixos/operator.pub`
+### 1.1 Workstation prep — operator-managed files
 
-Two operator-managed files stay outside git but are pulled in by `flake.nix` as path inputs (so eval is pure — no `--impure` needed). Create both once per workstation that'll run `nixos-anywhere`:
+These four files live outside git and are pulled in as flake path inputs (pure eval throughout). Create once per workstation:
 
 ```bash
+sudo install -d -m 0755 /etc/nixos
+
 # Per-site values (domain + ACME email)
-sudo install -m 600 -o root -g root /dev/null /etc/nixos/site.nix
+sudo install -m 0644 -o root -g root /dev/null /etc/nixos/site.nix
 sudo tee /etc/nixos/site.nix >/dev/null <<'EOF'
 {
   acmeDomain = "home.dedyn.io";       # your deSEC subdomain
@@ -30,93 +32,122 @@ sudo tee /etc/nixos/site.nix >/dev/null <<'EOF'
 }
 EOF
 
-# SSH pubkey baked into operator's authorized_keys on both hosts
+# Operator pubkey — baked into both hosts' `operator` user authorized_keys
 sudo cp ~/.ssh/id_ed25519.pub /etc/nixos/operator.pub
+
+# Main's SSH host keypair — private gets shipped at install via
+# nixos-anywhere --extra-files; pubkey is the agenix recipient for
+# main's secrets.
+sudo ssh-keygen -t ed25519 -N "" -f /etc/nixos/main-host-key -C "main@homeserver"
+
+# Main's root SSH keypair — for restic SFTP into Pi. Private is
+# encrypted into secrets/main-root-sshkey.age; pubkey is a flake input
+# baked into Pi's restic authorized_keys.
+sudo ssh-keygen -t ed25519 -N "" -f /etc/nixos/main-root-key -C "main-root@homeserver"
 ```
 
-After creating or changing either file, run `nix flake lock` in the repo so `flake.lock` captures the updated narHash. (The lock change is part of your branch and commits normally.)
+### 1.2 Encrypt the agenix secrets
 
-### 1.2 On the target: boot & confirm SSH
+Generate a deSEC API token at <https://desec.io/tokens> and a reusable Tailscale auth key in the Tailscale admin (untick "Ephemeral", leave "Pre-approved" unticked so devices wait for manual approval). Then encrypt four secrets — each opens `$EDITOR`; type/paste content, save, exit.
 
-Boot the live medium, enable SSH-as-root if the image doesn't already, and note the IP (`ip a`). Verify drive enumeration matches disko.nix (`/dev/sda` boot SSD, `/dev/sdb..sde` RAID spinners):
+```bash
+cd ~/server_config/secrets
+AGENIX="nix run --extra-experimental-features 'nix-command flakes' github:ryantm/agenix --"
+
+# Restic repo URL + encryption password
+$AGENIX -i ~/.ssh/id_ed25519 -e restic.env.age
+# In editor:
+#   RESTIC_REPOSITORY=sftp:restic@backupserver.<your-tailnet>.ts.net:/mnt/backups/homeserver
+#   RESTIC_PASSWORD=<openssl rand -hex 32 — SAVE in your password manager off-site>
+
+# deSEC API token
+$AGENIX -i ~/.ssh/id_ed25519 -e acme-credentials.env.age
+# In editor:
+#   DESEC_TOKEN=<your-desec-token>
+
+# Main's root SSH private key (paste the whole file including BEGIN/END)
+sudo cat /etc/nixos/main-root-key
+$AGENIX -i ~/.ssh/id_ed25519 -e main-root-sshkey.age
+
+# Tailscale auth key (just the tskey-auth-... string)
+$AGENIX -i ~/.ssh/id_ed25519 -e tailscale-authkey.age
+```
+
+Lock the new path inputs into `flake.lock`:
+
+```bash
+cd ~/server_config && nix flake lock
+```
+
+### 1.3 Target prep — boot SSH-capable image
+
+Boot any Linux with SSH-as-root on the target. Verify disko's expected disk layout (`/dev/sda` boot SSD, `/dev/sdb..sde` RAID spinners) — disko will WIPE every disk listed:
 
 ```bash
 lsblk
 ```
 
-If device names differ, edit `hosts/main/disko.nix` on the workstation before installing. Disko wipes the listed disks — double-check.
+If device names differ, edit `hosts/main/disko.nix` on the workstation before installing.
 
-### 1.3 On the workstation: run nixos-anywhere
+### 1.4 Stage main's host key for shipping
+
+agenix on main decrypts using `/etc/ssh/ssh_host_ed25519_key`. Ship the pre-generated key so the on-disk key matches the agenix recipient:
+
+```bash
+mkdir -p /tmp/main-extra/etc/ssh
+sudo install -m 0600 -o root -g root /etc/nixos/main-host-key /tmp/main-extra/etc/ssh/ssh_host_ed25519_key
+sudo install -m 0644 -o root -g root /etc/nixos/main-host-key.pub /tmp/main-extra/etc/ssh/ssh_host_ed25519_key.pub
+```
+
+### 1.5 Run nixos-anywhere
 
 ```bash
 nix run github:nix-community/nixos-anywhere -- \
   --flake ~/server_config#main \
-  --target-host root@<target-ip>
+  --target-host root@<main-lan-ip> \
+  --extra-files /tmp/main-extra
+
+rm -rf /tmp/main-extra        # cleanup post-install
 ```
 
-Nixos-anywhere kexecs into the NixOS installer, runs disko to partition + format, installs the flake closure, and reboots the target into NixOS. Expect ~10–20 minutes depending on network.
+Nixos-anywhere kexecs into the NixOS installer, runs disko to partition + format, installs the flake closure with main's pre-generated host key in place, and reboots. Expect ~15–20 minutes depending on network.
 
-**Optional — ship operator-managed files at install time** with `--extra-files`:
+### 1.6 First boot
 
 ```bash
-mkdir -p /tmp/extra/etc/{acme,restic,nixos}
-sudo cp /etc/acme/credentials.env /tmp/extra/etc/acme/    # if you already have one
-# ...same for /etc/restic/env
-nix run github:nix-community/nixos-anywhere -- \
-  --flake ~/server_config#main \
-  --target-host root@<target-ip> \
-  --extra-files /tmp/extra
+ssh operator@<main-lan-ip>
+sudo passwd operator
+cat /proc/mdstat              # verify RAID 10 assembled healthy
+ls /run/agenix/               # restic-env, acme-credentials, main-root-sshkey, tailscale-authkey
 ```
 
-(Note: `site.nix` and `operator.pub` are already baked into the flake closure via path inputs, so they don't need shipping separately.)
+Tailscale registers itself on first boot (via the agenix-decrypted auth key) and waits in the Tailscale admin for your manual approval click.
 
-Otherwise, create these files on the target post-install (see §6.3, §11.1).
+---
 
-### 1.4 First boot
+## 2. Approve main on the tailnet
 
-SSH back in via the tailnet hostname (once Tailscale is up — §3) or the LAN IP:
+Visit the [Tailscale admin](https://login.tailscale.com/admin/machines), find `homeserver` waiting for approval (because the auth key is reusable but not pre-approved), click approve. Subsequent SSH:
 
 ```bash
-passwd operator            # set a real password
-cat /proc/mdstat       # verify RAID 10 assembled healthy
+ssh operator@homeserver.<your-tailnet>.ts.net
+```
+
+`/mnt/data/{seafile,backups}` are pre-created with `operator:users` ownership by `systemd.tmpfiles`.
+
+---
+
+## 3. Clone the repo on main
+
+The flake auto-upgrade pulls from GitHub directly, but the Compose stack needs the repo locally for the `.env` file + compose YAMLs:
+
+```bash
+cd ~ && git clone <your-repo-url> server_config && cd server_config
 ```
 
 ---
 
-## 2. Create data directories
-
-```bash
-sudo mkdir -p /mnt/data/{seafile,backups}
-sudo chown operator:users /mnt/data/{seafile,backups}
-```
-
----
-
-## 3. Set up Tailscale
-
-```bash
-sudo tailscale up
-```
-
-Follow the link to authenticate. Your server will be accessible at
-`homeserver.<your-tailnet>.ts.net` from any device with Tailscale installed.
-
-To use Tailscale MagicDNS as your domain, update `DOMAIN` in `.env`
-(see step 5).
-
----
-
-## 4. Clone the repo
-
-```bash
-cd ~
-git clone <your-repo-url> server_config
-cd server_config
-```
-
----
-
-## 5. Configure environment
+## 4. Configure environment
 
 ```bash
 cp .env.example .env
@@ -126,7 +157,7 @@ Edit `.env` and fill in all values:
 
 | Variable | What to set |
 |---|---|
-| `DOMAIN` | Your deSEC subdomain (e.g. `home.dedyn.io`). MUST match `site.acmeDomain` in `/etc/nixos/site.nix` (step 6). `homeserver.local` still works for LAN-only testing with internal CA certs. |
+| `DOMAIN` | Your deSEC subdomain (e.g. `home.dedyn.io`). MUST match `site.acmeDomain` in `/etc/nixos/site.nix` (§1.1). `homeserver.local` still works for LAN-only testing with internal CA certs. |
 | `SEAFILE_MYSQL_ROOT_PASSWORD` | Strong random password |
 | `SEAFILE_MYSQL_DB_PASSWORD` | Strong random password (Seafile DB user) |
 | `SEAFILE_ADMIN_EMAIL` | Your admin email |
@@ -146,75 +177,31 @@ openssl rand -hex 16
 
 ---
 
-## 6. Set up real TLS certs via deSEC + ACME DNS-01
+## 5. TLS certs via deSEC + ACME DNS-01
 
-This gives every service a trusted Let's Encrypt cert (no "accept
-this certificate?" prompts on devices). Issuance and renewal are
-handled on the host by NixOS `security.acme`; Caddy just reads the
-resulting cert files.
+NixOS `security.acme` issues + renews a wildcard cert for `*.${DOMAIN}`. The DNS-01 challenge runs through deSEC's API; the token is already encrypted in `secrets/acme-credentials.env.age` (decrypted at activation by agenix), so no file creation is needed on main.
 
-### 6.1 Sign up at deSEC
+### 5.1 deSEC account + DNS records
 
 1. Create a free account at <https://desec.io>, confirm the email.
-2. Under "DNS" → "My domains" → "Create new": register the subdomain
-   you used as `DOMAIN` (e.g. `home.dedyn.io`).
-3. Add a wildcard A record for your Tailscale IP:
-   - Subname: `*`
-   - Type: `A`
-   - Value: `homeserver`'s Tailscale IP (from `tailscale ip` on the
-     server).
-   - TTL: 3600 is fine.
+2. Under "DNS" → "My domains" → "Create new": register the subdomain matching `site.acmeDomain` (e.g. `home.dedyn.io`).
+3. Add a wildcard A record pointing at `homeserver`'s Tailscale IP:
+   - Subname: `*`, Type: `A`, Value: `tailscale ip` output on main, TTL: 3600.
 
-### 6.2 Generate a DNS API token
+### 5.2 Verify ACME issuance
 
-1. Go to <https://desec.io/tokens> → "Create new token".
-2. Scope: restrict to "manage tokens" = off, "manage account" = off,
-   perm tokens for DNS = yes. (The default "DNS write" scope is fine.)
-3. Copy the token string — it's shown once.
-
-### 6.3 Write the operator-managed files on main
-
-Two files live outside Nix (not in git). Create them as root:
+The first cert issuance triggered automatically when nixos-rebuild ran in §1.5; deSEC propagation + Let's Encrypt validation takes 2–5 min. Verify:
 
 ```bash
-# Site-specific values read at nixos-rebuild time by configuration.nix
-sudo install -m 600 -o root -g root /dev/null /etc/nixos/site.nix
-sudo tee /etc/nixos/site.nix >/dev/null <<'EOF'
-{
-  acmeDomain = "home.dedyn.io";       # MUST match DOMAIN in hosts/main/.env
-  acmeEmail  = "you@example.com";     # for Let's Encrypt expiry reminders
-}
-EOF
-
-# DNS provider credentials read by the acme service at runtime
-sudo mkdir -p /etc/acme
-sudo install -m 600 -o root -g root /dev/null /etc/acme/credentials.env
-sudo tee /etc/acme/credentials.env >/dev/null <<'EOF'
-DESEC_TOKEN=<paste-your-desec-token-here>
-EOF
+sudo journalctl -u acme-$(sudo nix eval --raw -f /etc/nixos/site.nix acmeDomain).service -f
+ls /var/lib/acme/<your-domain>/      # cert.pem, key.pem, fullchain.pem, chain.pem
 ```
 
-### 6.4 Apply
-
-```bash
-sudo nixos-rebuild switch --flake ~/server_config#main
-```
-
-First request may take a minute (deSEC propagation + Let's Encrypt
-validation). Verify:
-
-```bash
-systemctl status acme-<your-domain>.service      # should be "inactive (dead)" after success
-ls /var/lib/acme/<your-domain>/                   # cert.pem, key.pem, fullchain.pem, chain.pem
-```
-
-Once the files exist, the Caddy container on the next compose-up (or
-after the `caddy-reload-certs.service` fires on renewal) will serve
-real certs.
+Caddy picks up the cert files when started in §6. `caddy-reload-certs.service` restarts Caddy on each renewal — first nixos-rebuild logged it failed because Caddy isn't up yet; that resolves after §6.
 
 ---
 
-## 7. Create the Docker network
+## 6. Create the Docker network
 
 All services share a single network for Caddy to reach them:
 
@@ -224,33 +211,29 @@ docker network create proxy
 
 ---
 
-## 8. Deploy services
+## 7. Deploy services
 
-Start Caddy first, then the rest in any order:
+Caddy first (other services depend on the `proxy` network it uses), then re-run nixos-rebuild so `caddy-reload-certs.service` finds the container, then the rest:
 
 ```bash
 cd ~/server_config/hosts/main
 
-# Reverse proxy (must be first)
+# Caddy first
 docker compose --env-file .env -f compose/caddy.yml up -d
 
-# Core services
-docker compose --env-file .env -f compose/seafile.yml up -d
-docker compose --env-file .env -f compose/vaultwarden.yml up -d
-docker compose --env-file .env -f compose/joplin.yml up -d
-docker compose --env-file .env -f compose/portainer.yml up -d
+# Re-rebuild so caddy-reload-certs stops failing
+sudo nixos-rebuild switch --flake ~/server_config#main
 
-# Push notifications (operator alerts — ntfy). Bring this up BEFORE WUD
-# so WUD's first notifications have somewhere to land.
-docker compose --env-file .env -f compose/ntfy.yml up -d
-
-# Update monitoring (posts container-update notifications to ntfy)
-docker compose --env-file .env -f compose/wud.yml up -d
+# Rest of the stack (joplin-init runs once after joplin's healthcheck
+# passes and rotates admin/admin → JOPLIN_ADMIN_PASSWORD).
+for svc in seafile vaultwarden joplin portainer ntfy wud; do
+  docker compose --env-file .env -f compose/$svc.yml up -d
+done
 ```
 
 ---
 
-## 9. Verify services
+## 8. Verify services
 
 Open these URLs (replace `DOMAIN` with your value from `.env`):
 
@@ -263,21 +246,15 @@ Open these URLs (replace `DOMAIN` with your value from `.env`):
 | WUD | `https://wud.DOMAIN` |
 | ntfy | `https://ntfy.DOMAIN` |
 
-With the deSEC ACME setup from step 6, certs are real Let's Encrypt
-ones and no warning should appear. If you're on the `homeserver.local`
-fallback instead, your browser will warn about Caddy's internal CA
-on first visit — accept the cert to proceed.
+With the deSEC ACME setup from §5, certs are real Let's Encrypt ones and no browser warning appears. If you're on the `homeserver.local` LAN-only fallback, browsers will warn about Caddy's internal CA on first visit — accept the cert.
 
 ---
 
-## 10. Set up AdGuard Home (network-wide DNS + ad-blocking)
+## 9. AdGuard Home (network-wide DNS + ad-blocking)
 
-AdGuard Home runs as a NixOS service (enabled by the rebuild in step 6,
-not a Docker container). It listens for DNS on port 53 across the
-tailnet and LAN, and forwards non-blocked queries to Quad9 primary +
-Cloudflare secondary over DoT.
+AdGuard Home runs as a NixOS service (already enabled by §1.5's nixos-rebuild). DNS on `0.0.0.0:53` (tailnet + LAN reachable), forwards to Quad9 + Cloudflare over DoT.
 
-### 10.1 Initial setup wizard
+### 9.1 Initial setup wizard
 
 1. Visit `https://adguard.DOMAIN` (proxied by Caddy to the host's UI
    on `127.0.0.1:3000`).
@@ -291,7 +268,7 @@ Cloudflare secondary over DoT.
    — the AdGuard DNS filter is a fine default; add AdAway + EasyList
    for more aggressive blocking.
 
-### 10.2 Point devices at AdGuard
+### 9.2 Point devices at AdGuard
 
 Two complementary paths:
 
@@ -304,7 +281,7 @@ tailnet peers will use AdGuard automatically.
 your router's DHCP config, hand out `homeserver`'s LAN IP as the
 primary DNS server. Devices will pick it up on DHCP renewal.
 
-### 10.3 Verify
+### 9.3 Verify
 
 On a device using AdGuard:
 
@@ -316,7 +293,7 @@ dig doubleclick.net @<homeserver-ip>
 The AdGuard UI's **Query log** shows every query in real-time; great
 for debugging when a site breaks ("what did it try to reach?").
 
-### 10.4 Troubleshooting
+### 9.4 Troubleshooting
 
 - **AdGuard won't start / port 53 conflict** — another service on main
   is bound to 53. Unlikely with our config (NetworkManager doesn't
@@ -328,64 +305,41 @@ for debugging when a site breaks ("what did it try to reach?").
 
 ---
 
-## 11. Set up backups
+## 10. Verify backups
 
-Prerequisite: the `backupserver` Pi is already running and reachable
-via Tailscale (see [`hosts/backup/README.md`](../backup/README.md)).
+Prerequisite: the `backupserver` Pi is already running and reachable via Tailscale (see [`hosts/backup/README.md`](../backup/README.md)). All backup wiring (restic env, main's root SSH key, ACME credentials) is already in place via agenix from §1.2.
 
-### 11.1 Write the env file
-
-One file holds both the repository URL and the password, read by the
-restic systemd service at runtime:
-
-```bash
-sudo install -m 600 -o root -g root /dev/null /etc/restic/env
-sudo tee /etc/restic/env >/dev/null <<EOF
-RESTIC_REPOSITORY=sftp:restic@backupserver.<your-tailnet>.ts.net:/mnt/backups/homeserver
-RESTIC_PASSWORD=$(openssl rand -hex 32)
-EOF
-```
-
-Save the `RESTIC_PASSWORD` value somewhere safe (e.g. Vaultwarden) —
-restores need it. `cat /etc/restic/env` to recover it once.
-
-### 11.2 Give root an SSH key for the Pi
-
-The backup runs as root, so root needs an SSH key the Pi accepts:
-
-```bash
-sudo ssh-keygen -t ed25519 -f /root/.ssh/id_ed25519 -N ""
-sudo cat /root/.ssh/id_ed25519.pub
-# paste this pubkey into hosts/backup/configuration.nix under
-# users.users.restic.openssh.authorizedKeys.keys, then rebuild the Pi
-```
-
-### 11.3 Apply
-
-```bash
-sudo nixos-rebuild switch --flake ~/server_config#main
-```
-
-The two timers — `restic-backups-docker-volumes.timer` and
-`restic-backups-seafile-data.timer` — fire daily at 03:00. Verify:
+The three jobs (`restic-backups-docker-volumes.timer`, `restic-backups-seafile-data.timer`, `restic-backups-adguard-state.timer`) fire daily at 03:00 + 30m randomized delay. Trigger the first run manually:
 
 ```bash
 systemctl list-timers 'restic-backups-*'
 
-# Run once manually to initialise the repo and confirm end-to-end
 sudo systemctl start restic-backups-docker-volumes.service
 sudo journalctl -u restic-backups-docker-volumes.service -f
+# Initial seeding takes ~30–60 min over SFTP/Tailscale
 ```
 
-On success each job sends a **silent** ntfy notification (Priority 1) to
-the `home-backup` topic. On failure, a templated `ntfy-backup-failure@`
-service fires via `OnFailure` and sends an **audible** alert with the
-unit name, so you can `journalctl -u restic-backups-<tag>.service` for
-details.
+Verify the snapshot landed on the Pi:
+
+```bash
+ssh operator@backupserver.<your-tailnet>.ts.net \
+  ls /mnt/backups/homeserver/snapshots
+```
+
+Then trigger the other two jobs:
+
+```bash
+sudo systemctl start restic-backups-seafile-data.service
+sudo systemctl start restic-backups-adguard-state.service
+```
+
+On success each job sends a **silent** ntfy ping (Priority 1) to `home-backup`. On failure, the templated `ntfy-backup-failure@.service` fires via `OnFailure` with an **audible** alert; `journalctl -u restic-backups-<tag>.service` for details.
+
+**Off-site key escrow:** when you generated `RESTIC_PASSWORD` in §1.2, you saved it to your password manager. Verify that's still true now — without it, a complete loss of both main and your workstation = unrecoverable backups. See `CLAUDE.md` § Disaster recovery.
 
 ---
 
-## 12. Connect your devices
+## 11. Connect your devices
 
 ### Seafile desktop sync
 
@@ -406,7 +360,7 @@ details.
 1. In Joplin, go to Settings > Synchronisation
 2. Set target to "Joplin Server"
 3. Server URL: `https://joplin.DOMAIN`
-4. Default admin login: `admin@localhost` / `admin` (change immediately)
+4. Admin login: `admin@localhost` + the `JOPLIN_ADMIN_PASSWORD` you set in `.env` (the `joplin-init` container rotated the upstream default at first compose-up).
 
 ### Seafile server-only files
 
@@ -432,7 +386,7 @@ you don't need locally.
 
 ---
 
-## 13. Updates
+## 12. Updates
 
 ### How updates work
 

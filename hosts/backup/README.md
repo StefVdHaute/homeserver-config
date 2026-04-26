@@ -16,60 +16,63 @@ Scope: the Raspberry Pi 4 that receives restic backups from `homeserver` over SF
 
 Any Linux-with-SSH-as-root works as a starting point — nixos-anywhere kexecs into the NixOS installer from whatever's running. Raspberry Pi OS Lite, Ubuntu Server for Pi, or the NixOS aarch64 SD image are all fine.
 
-Flash your chosen image, boot the Pi, enable SSH-as-root, and note the IP:
-
 ```bash
 # on the Pi, once booted
 sudo systemctl enable --now ssh    # or equivalent for your image
 ip a                               # note the LAN IP
 ```
 
-Plug in the external USB drive. Disko will wipe both `/dev/mmcblk0` (SD) and `/dev/sda` (USB) — double-check `lsblk` if your enumeration differs.
+Plug in the external USB drive. Disko WIPES both `/dev/mmcblk0` (SD) and `/dev/sda` (USB) — verify `lsblk` first.
+
+Workstation prep (per main README §1.1, all four `/etc/nixos/*` files): `operator.pub` baked into the Pi's `operator` user, `main-root-key.pub` baked into the Pi's `restic` user authorized_keys via flake input. No manual paste step on the Pi side.
 
 ---
 
-## 2. Paste main's root pubkey into `hosts/backup/configuration.nix`
+## 2. Stage the Tailscale auth key for shipping
 
-**operator's pubkey** is already handled via `/etc/nixos/operator.pub` on the workstation (see main README §1.1), so no action there.
+Pi's `services.tailscale.authKeyFile` reads `/etc/tailscale/authkey` on first boot. The same reusable auth key from main's install (Tailscale admin: untick "Ephemeral", leave "Pre-approved" off) works here. Stage it for `nixos-anywhere --extra-files`:
 
-**main's root pubkey** is still manual — it lets main push restic backups to the Pi over SFTP and can only be known after main is installed and its root key generated. On main: `sudo ssh-keygen -t ed25519 -f /root/.ssh/id_ed25519 -N ""` (if missing), then `sudo cat /root/.ssh/id_ed25519.pub`. Paste that under `users.users.restic.openssh.authorizedKeys.keys` in `hosts/backup/configuration.nix`, commit, and continue.
+```bash
+mkdir -p /tmp/pi-extra/etc/tailscale
+echo 'tskey-auth-...' > /tmp/pi-extra/etc/tailscale/authkey
+chmod 0600 /tmp/pi-extra/etc/tailscale/authkey
+```
 
 ---
 
-## 3. Install via nixos-anywhere
+## 3. Run nixos-anywhere
 
-From the workstation (or main):
+From the workstation (or main, which has aarch64 binfmt):
 
 ```bash
 nix run github:nix-community/nixos-anywhere -- \
   --flake ~/server_config#backup \
-  --target-host root@<pi-ip>
+  --target-host root@<pi-lan-ip> \
+  --extra-files /tmp/pi-extra
+
+rm -rf /tmp/pi-extra        # cleanup post-install
 ```
 
-Nixos-anywhere kexecs into the NixOS installer, runs disko (SD gets GPT with FAT32 firmware + ext4 root; USB gets GPT with btrfs `backup-data` + `@homeserver` subvolume), installs the flake closure, and reboots the Pi into NixOS.
-
-**Path B — Nix-native SD image** (alternative, skips the throwaway Linux step): build the SD image with `nix build .#nixosConfigurations.backup.config.system.build.sdImage`, flash the result, boot. You'll still need the disko step for the external USB drive on first boot (`sudo disko --mode destroy,format,mount hosts/backup/disko.nix`, or just declare USB-only disko and skip SD partitioning). Currently the backup config doesn't import an sd-image module, so this path needs a small config change first — flagged as a follow-up.
+Disko: SD → 512MB FAT32 firmware + btrfs `@nixos` root; USB → btrfs `backup-data` with `@homeserver` subvolume mounted at `/mnt/backups`. Then flake closure, then reboot.
 
 ---
 
-## 4. First boot + Tailscale
+## 4. Approve on tailnet, SSH, passwd
 
-SSH in as `operator` on the LAN IP (keypair from §2 authorises you), then join the tailnet:
+Pi registers on the tailnet automatically using the auth key. Approve `backupserver` in the [Tailscale admin](https://login.tailscale.com/admin/machines), then:
 
 ```bash
-ssh operator@<pi-ip>
-sudo passwd operator                   # set a real password
-sudo tailscale up                  # follow the auth link
+ssh operator@backupserver.<your-tailnet>.ts.net
+sudo passwd operator
 ```
 
-The Pi is now reachable as `backupserver.<tailnet>.ts.net` from any tailnet peer; subsequent steps can all be done over that hostname. State at this point:
-
-- `operator` and `restic` users exist with authorised keys
+State after first boot:
+- `operator` and `restic` users exist with authorized keys (from flake inputs)
 - `/mnt/backups` mounted from the external USB btrfs via disko
 - SSH only reachable over the tailnet (firewall blocks WAN/LAN)
 - `services.smartd` posts disk alerts to main's ntfy topic `home-smart`
-- `nixos-upgrade` runs daily at 05:30 but only when a restic snapshot has landed in the last 24h
-- `OnFailure` hooks post `home-infra` alerts to ntfy for `nixos-upgrade`, `tailscaled`, or `mnt-backups.mount` failures (via the shared `ntfy-infra-failure@.service` template)
+- `nixos-upgrade` runs Mondays 05:30 but only when a restic snapshot has landed in the last 24h **and** main's ntfy responds
+- `OnFailure` hooks post `home-infra` alerts to ntfy for `nixos-upgrade`, `tailscaled`, or `mnt-backups.mount` failures
 
 ---
 
@@ -101,17 +104,11 @@ The helper `/run/current-system/sw/bin/smartd-ntfy` appends `/home-smart` at run
 
 ## 7. First backup from main
 
-Follow [`hosts/main/README.md`](../main/README.md) §11 to create `/etc/restic/env` on main and trigger the first backup:
+Follow [`hosts/main/README.md`](../main/README.md) §10 to trigger the first restic run from main. Verify on the Pi:
 
 ```bash
-sudo systemctl start restic-backups-docker-volumes.service
-sudo journalctl -u restic-backups-docker-volumes.service -f
-```
-
-Verify the snapshot landed on the Pi:
-
-```bash
-ssh restic@backupserver.<tailnet>.ts.net ls /mnt/backups/homeserver/snapshots
+ssh operator@backupserver.<your-tailnet>.ts.net \
+  ls /mnt/backups/homeserver/snapshots
 ```
 
 ---

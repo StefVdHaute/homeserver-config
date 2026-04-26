@@ -48,7 +48,7 @@
 
 ## Backup
 
-- [ ] Automate the Pi `restic` user's authorized_keys — currently the main server's `/root/.ssh/id_ed25519.pub` is pasted by hand into `hosts/backup/configuration.nix` after main is installed (install-order dependency, main's root key doesn't exist until then). Options: ship via `nixos-anywhere --extra-files` on Pi redeploy, or add `resticHostPubkey` to `site.nix` and read via `keyFiles`.
+- [x] Automate the Pi `restic` user's authorized_keys — done via `mainRootPubkey` flake input (`/etc/nixos/main-root-key.pub` on the workstation). The matching private is encrypted into `secrets/main-root-sshkey.age` and decrypted onto main at `/root/.ssh/id_ed25519`. No manual paste.
 - [x] Restic systemd timer schedule
 - [x] Scheduled `restic check` — monthly `restic-check-deep.timer` on main runs `--read-data-subset=10%`; alerts via ntfy on failure, silent success ping on `home-backup`.
 - [ ] Restore verification — periodic automated restore-to-scratch from the Pi to prove the chain end-to-end works. Post-deploy operational task; needs real data in the repo to be meaningful.

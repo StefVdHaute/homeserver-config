@@ -165,6 +165,43 @@ Two categories:
 
 ---
 
+## Disaster recovery
+
+`secrets/restic.env.age` (and every other `.age` file) is encrypted to **two recipients**: main's SSH host pubkey, and the operator's workstation pubkey (read from `/etc/nixos/operator.pub`). Either private key is sufficient to decrypt — survival of one means survival of the backup.
+
+### Main loss (Pi + workstation intact)
+
+Most common scenario: main's drives die, fire, theft. Pi still holds the encrypted restic repo.
+
+1. From any machine with the operator's `~/.ssh/id_ed25519` and a clone of the repo, decrypt the repo URL + password:
+   ```bash
+   nix run github:ryantm/agenix -- -i ~/.ssh/id_ed25519 -d secrets/restic.env.age
+   ```
+2. Restic can now restore from the Pi via SFTP — anywhere with `restic` installed.
+3. To bring main back online: pre-generate a new `/etc/nixos/main-host-key`, `nix flake lock`, run `agenix -r` from `secrets/` to rekey every secret to the new host pubkey + operator, then nixos-anywhere a fresh main with the new host private shipped via `--extra-files`.
+
+### Pi loss (main + workstation intact)
+
+Main keeps running; backup target is gone. Repo on Pi was the only copy of historical snapshots — those are lost. Rebuild:
+
+1. Replace Pi hardware. Re-run nixos-anywhere as documented.
+2. Main's next 03:00 restic timer re-initializes a fresh repo on the new Pi (`initialize = true`) and seeds it.
+3. Snapshot history before the loss is gone; current state is preserved (still on main).
+
+### Catastrophic loss (main + workstation BOTH gone)
+
+Encrypted secrets in the repo are unreadable — neither private key remains. Pi's repo is unrecoverable.
+
+To survive this scenario, keep **at least one** off-site / offline:
+
+- **Workstation `~/.ssh/id_ed25519`** copied to an offline medium (USB in a safe, etc.). Cheapest, recovers everything.
+- **OR `RESTIC_PASSWORD` plaintext** in a cloud password manager (Bitwarden cloud, 1Password, Proton Pass). Only recovers the restic repo — secrets/acme-credentials.env.age stays unreadable, but those are easier to regenerate (re-issue deSEC token).
+- **OR a paper backup of the password.** Same scope as the password manager option.
+
+The deploy playbook's secrets-inventory section calls this out at install time — when you generate the `RESTIC_PASSWORD`, save it to your password manager *immediately*. The encrypted-only-in-repo posture is only safe if the recovery key has a redundant home.
+
+---
+
 ## Files in this repo
 
 | File | Purpose |
