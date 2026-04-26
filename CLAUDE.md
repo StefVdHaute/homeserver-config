@@ -209,6 +209,7 @@ The deploy playbook's secrets-inventory section calls this out at install time �
 | `flake.nix` | Pinned nixpkgs + `nixosConfigurations.main` / `.backup` |
 | `README.md` | Top-level index for both hosts |
 | `CLAUDE.md` | This file — architecture + decisions |
+| `DEPLOY.md` | First-install playbook (workstation prep → Pi → main → smoke tests) |
 | `TODO.md` | Outstanding tasks |
 | `modules/alerts.nix` | Shared NixOS module: ntfy helper, smartd wiring, templated failure notifiers. Imported by both hosts. |
 | `hosts/main/configuration.nix` | Main host NixOS config (boot, RAID, Docker, SSH, Tailscale, firewall, auto-upgrade) |
