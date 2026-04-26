@@ -3,7 +3,8 @@
 # destroy,format,mount <this-file>` from a running system).
 #
 # Replaces the imperative disk-setup.sh. Layout:
-#   /dev/mmcblk0   — SD card: 512MB FAT32 firmware partition + ext4 root
+#   /dev/mmcblk0   — SD card: 512MB FAT32 firmware partition + btrfs
+#                    `@nixos` subvolume mounted at /
 #   /dev/sda       — external USB SSD: single GPT partition, btrfs
 #                    labelled "backup-data" with the @homeserver subvolume
 #                    mounted at /mnt/backups
@@ -40,10 +41,14 @@
               label = "nixos-root";
               size = "100%";
               content = {
-                type = "filesystem";
-                format = "ext4";
-                mountpoint = "/";
-                mountOptions = [ "noatime" ];
+                type = "btrfs";
+                extraArgs = [ "-L" "nixos-root" "-f" ];
+                subvolumes = {
+                  "@nixos" = {
+                    mountpoint = "/";
+                    mountOptions = [ "compress=zstd:3" "noatime" ];
+                  };
+                };
               };
             };
           };

@@ -2,11 +2,12 @@
 # `nixos-anywhere` install (or `sudo disko --mode destroy,format,mount
 # <this-file>` from a running system).
 #
-# Replaces the imperative raid-setup.sh. Matches the historical layout:
-#   /dev/sda       — 250GB boot SSD: ESP + 8GB swap + ext4 root
+# Replaces the imperative raid-setup.sh. Layout:
+#   /dev/sda       — 250GB boot SSD: ESP + 8GB swap + btrfs `@nixos`
+#                    subvolume mounted at /
 #   /dev/sdb..sde  — 4x 1TB spinners, each contributing one partition
-#                    to an mdadm RAID 10 array (md/raid10), ext4
-#                    filesystem mounted at /mnt/data
+#                    to an mdadm RAID 10 array (md/raid10) holding btrfs
+#                    with the `@data` subvolume mounted at /mnt/data
 #
 # VERIFY WITH `lsblk` BEFORE RUNNING. If the server's device names
 # differ, adjust the `device =` lines below. Once disko has run, the
@@ -46,10 +47,14 @@
               label = "nixos-root";
               size = "100%";
               content = {
-                type = "filesystem";
-                format = "ext4";
-                mountpoint = "/";
-                mountOptions = [ "noatime" ];
+                type = "btrfs";
+                extraArgs = [ "-L" "nixos-root" "-f" ];
+                subvolumes = {
+                  "@nixos" = {
+                    mountpoint = "/";
+                    mountOptions = [ "compress=zstd:3" "noatime" ];
+                  };
+                };
               };
             };
           };

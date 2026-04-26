@@ -174,14 +174,14 @@ Two categories:
 | `TODO.md` | Outstanding tasks |
 | `modules/alerts.nix` | Shared NixOS module: ntfy helper, smartd wiring, templated failure notifiers. Imported by both hosts. |
 | `hosts/main/configuration.nix` | Main host NixOS config (boot, RAID, Docker, SSH, Tailscale, firewall, auto-upgrade) |
-| `hosts/main/disko.nix` | Declarative disk layout: boot SSD (ESP + swap + ext4 root) + mdadm RAID 10 over 4 spinners with btrfs `@data` subvolume at `/mnt/data` |
+| `hosts/main/disko.nix` | Declarative disk layout: boot SSD (ESP + swap + btrfs `@nixos` at `/`) + mdadm RAID 10 over 4 spinners with btrfs `@data` at `/mnt/data` |
 | `hosts/main/hardware-configuration.nix` | Hand-authored platform stub: initrd modules (incl. raid10/md_mod), kvm-intel, Intel microcode |
 | `hosts/main/Caddyfile` | Reverse proxy routes for all main-host services |
 | `hosts/main/.env.example` | Main-host environment variable template |
 | `hosts/main/compose/*.yml` | Docker Compose files (one per service) |
 | `hosts/main/README.md` | Main-host setup guide |
 | `hosts/backup/configuration.nix` | Pi backup-host NixOS config (aarch64, btrfs, firewall, heartbeat-gated auto-upgrade) |
-| `hosts/backup/disko.nix` | Declarative disk layout: SD (FAT32 firmware + ext4 root) + external USB btrfs with `@homeserver` subvolume |
+| `hosts/backup/disko.nix` | Declarative disk layout: SD (FAT32 firmware + btrfs `@nixos` at `/`) + external USB btrfs with `@homeserver` subvolume |
 | `hosts/backup/hardware-configuration.nix` | Hand-authored platform stub: aarch64, USB + MMC initrd modules |
 | `hosts/backup/README.md` | Pi backup-host setup guide |
 
