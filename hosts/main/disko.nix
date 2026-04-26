@@ -107,10 +107,14 @@
         type = "mdadm";
         level = 10;
         content = {
-          type = "filesystem";
-          format = "ext4";
-          mountpoint = "/mnt/data";
-          mountOptions = [ "defaults" "nofail" ];
+          type = "btrfs";
+          extraArgs = [ "-L" "data" "-f" ];
+          subvolumes = {
+            "@data" = {
+              mountpoint = "/mnt/data";
+              mountOptions = [ "compress=zstd:3" "noatime" "nofail" ];
+            };
+          };
         };
       };
     };

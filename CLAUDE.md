@@ -12,7 +12,7 @@ This file is the single source of truth for architecture, decisions, and the beh
 
 - **Hardware:** Dual Xeon, DDR3, 32–48GB RAM
 - **Boot drive:** 250GB SSD
-- **Storage:** 4× 1TB spinning drives in RAID 10 (2TB usable), mounted at `/mnt/data`
+- **Storage:** 4× 1TB spinning drives in mdadm RAID 10 (2TB usable), btrfs on top with the `@data` subvolume mounted at `/mnt/data` (zstd compression, noatime). Mdadm handles redundancy; btrfs handles checksumming + snapshots-if-needed.
 - **Role:** Runs all user-facing services (Seafile, Vaultwarden, Joplin, Portainer, WUD) behind Caddy; originates restic backups.
 - **Config:** `hosts/main/`
 
@@ -174,7 +174,7 @@ Two categories:
 | `TODO.md` | Outstanding tasks |
 | `modules/alerts.nix` | Shared NixOS module: ntfy helper, smartd wiring, templated failure notifiers. Imported by both hosts. |
 | `hosts/main/configuration.nix` | Main host NixOS config (boot, RAID, Docker, SSH, Tailscale, firewall, auto-upgrade) |
-| `hosts/main/disko.nix` | Declarative disk layout: boot SSD (ESP + swap + ext4 root) + RAID 10 over 4 spinners |
+| `hosts/main/disko.nix` | Declarative disk layout: boot SSD (ESP + swap + ext4 root) + mdadm RAID 10 over 4 spinners with btrfs `@data` subvolume at `/mnt/data` |
 | `hosts/main/hardware-configuration.nix` | Hand-authored platform stub: initrd modules (incl. raid10/md_mod), kvm-intel, Intel microcode |
 | `hosts/main/Caddyfile` | Reverse proxy routes for all main-host services |
 | `hosts/main/.env.example` | Main-host environment variable template |
