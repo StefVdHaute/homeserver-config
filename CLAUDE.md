@@ -152,6 +152,7 @@ Two categories:
 |---|---|
 | `hosts/main/.env` | Compose env vars (DOMAIN, service passwords). DOMAIN must match `site.acmeDomain`. Operator-managed because Docker Compose reads it at `up` time, not via the Nix activation pipeline. |
 | `/etc/ntfy/url` (Pi only) | Main's ntfy base URL on the tailnet. Single-line file. Read at runtime by the alerts module. |
+| `/etc/tailscale/authkey` (Pi only) | Tailscale auth key, one-line. Shipped via `nixos-anywhere --extra-files` at install; tailscaled reads on first boot to register. Main side uses agenix instead. |
 
 ---
 

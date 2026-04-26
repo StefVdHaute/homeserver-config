@@ -26,4 +26,5 @@ in {
   "restic.env.age".publicKeys = mainSecrets;
   "acme-credentials.env.age".publicKeys = mainSecrets;
   "main-root-sshkey.age".publicKeys = mainSecrets;
+  "tailscale-authkey.age".publicKeys = mainSecrets;
 }

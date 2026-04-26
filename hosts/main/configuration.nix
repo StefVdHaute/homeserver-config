@@ -80,6 +80,8 @@ in
       path = "/root/.ssh/id_ed25519";
       mode = "0600";
     };
+
+    tailscale-authkey.file = ../../secrets/tailscale-authkey.age;
   };
 
   # Operator alerts → local ntfy container (127.0.0.1:8085 via compose port map).
@@ -168,6 +170,11 @@ in
     fileSystems = [ "/" "/mnt/data" ];
   };
 
+  systemd.tmpfiles.rules = [
+    "d /mnt/data/seafile 0750 operator users - -"
+    "d /mnt/data/backups 0750 operator users - -"
+  ];
+
   # Garbage-collect old store paths weekly + hard-link duplicates so
   # /nix/store doesn't grow unbounded. 30d keeps plenty of NixOS
   # generations for rollback while reclaiming long-stale derivations.
@@ -243,6 +250,7 @@ in
   services.tailscale = {
     enable = true;
     useRoutingFeatures = "server";
+    authKeyFile = config.age.secrets.tailscale-authkey.path;
   };
 
   # ============================================================

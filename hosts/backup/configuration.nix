@@ -122,6 +122,7 @@
   services.tailscale = {
     enable = true;
     useRoutingFeatures = "none";
+    authKeyFile = "/etc/tailscale/authkey";
   };
 
   # ============================================================
