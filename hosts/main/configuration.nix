@@ -10,11 +10,10 @@ let
   site = siteConfig;
 
   # Shared options for every restic backup job on this host.
-  # /etc/restic/env holds RESTIC_REPOSITORY= and RESTIC_PASSWORD=,
-  # read by the service at runtime (expected repo:
-  # sftp:restic@backupserver.<tailnet>.ts.net:/mnt/backups/homeserver).
+  # RESTIC_REPOSITORY + RESTIC_PASSWORD live in secrets/restic.env.age,
+  # decrypted at activation by agenix to /run/agenix/restic-env.
   resticCommon = {
-    environmentFile = "/etc/restic/env";
+    environmentFile = config.age.secrets.restic-env.path;
     initialize = true;
     timerConfig = {
       OnCalendar = "03:00";
@@ -53,6 +52,35 @@ in
     ../../modules/alerts.nix
   ];
 
+  # ============================================================
+  # Secrets (agenix). All three .age files in secrets/ are encrypted to
+  # this host's SSH host key + the operator's pubkey (see secrets/secrets.nix).
+  # ============================================================
+  age.secrets = {
+    # /run/agenix/restic-env, root:root 0400 — used as restic's
+    # environmentFile via resticCommon above.
+    restic-env.file = ../../secrets/restic.env.age;
+
+    # Read by the security.acme service at issue/renew time. Owner must
+    # match the user the acme module runs as (`acme`).
+    acme-credentials = {
+      file = ../../secrets/acme-credentials.env.age;
+      owner = "acme";
+      group = "acme";
+      mode = "0400";
+    };
+
+    # main's root SSH private key. Restic (running as root) uses this to
+    # SFTP into the Pi's `restic` user. agenix symlinks /root/.ssh/id_ed25519
+    # to /run/agenix/main-root-sshkey; OpenSSH follows the symlink and
+    # sees the correct mode on the underlying tmpfs file.
+    main-root-sshkey = {
+      file = ../../secrets/main-root-sshkey.age;
+      path = "/root/.ssh/id_ed25519";
+      mode = "0600";
+    };
+  };
+
   # Operator alerts → local ntfy container (127.0.0.1:8085 via compose port map).
   alerts.ntfy.url = "http://127.0.0.1:8085";
   alerts.smartd.enable = true;
@@ -65,11 +93,11 @@ in
   # bind mount (see hosts/main/compose/caddy.yml + the `acme_tls`
   # snippet in Caddyfile).
   #
-  # DNS provider credentials live in /etc/acme/credentials.env
-  # (operator-managed, outside Nix, same pattern as /etc/restic/env and
-  # /etc/ntfy/url). For deSEC the file contains `DESEC_TOKEN=...`; if you
-  # ever switch providers, replace the variable name accordingly and
-  # flip `dnsProvider` below.
+  # DNS provider credentials live in secrets/acme-credentials.env.age,
+  # decrypted by agenix to /run/agenix/acme-credentials. For deSEC the
+  # decrypted file contains `DESEC_TOKEN=...`; if you ever switch
+  # providers, replace the variable name accordingly and flip
+  # `dnsProvider` below.
   # ============================================================
   security.acme = {
     acceptTerms = true;
@@ -79,7 +107,7 @@ in
     domain = site.acmeDomain;
     extraDomainNames = [ "*.${site.acmeDomain}" ];
     dnsProvider = "desec";
-    credentialsFile = "/etc/acme/credentials.env";
+    credentialsFile = config.age.secrets.acme-credentials.path;
     group = "caddy-certs";
     reloadServices = [ "caddy-reload-certs.service" ];
   };
@@ -314,7 +342,7 @@ in
     path = [ pkgs.restic pkgs.openssh ];
     serviceConfig = {
       Type = "oneshot";
-      EnvironmentFile = "/etc/restic/env";
+      EnvironmentFile = config.age.secrets.restic-env.path;
       ExecStart = "${pkgs.restic}/bin/restic check --read-data-subset=10%";
       ExecStartPost = "${ntfyNotify} home-backup 1 'Backup check OK' 'Monthly deep restic check passed (10% subset)'";
       Nice = 19;

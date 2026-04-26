@@ -83,7 +83,7 @@ Restic is not in the table above — it runs as a NixOS service (`services.resti
 
 - **Tool:** Restic, declared via NixOS `services.restic.backups.<name>` in `hosts/main/configuration.nix`. Two jobs share a `resticCommon` record: `docker-volumes` and `seafile-data`.
 - **Target:** `backupserver` (Pi) over SFTP via Tailscale.
-- **Config:** `/etc/restic/env` on main holds `RESTIC_REPOSITORY=` and `RESTIC_PASSWORD=` — operator-managed, mode 0600, outside git. Wired via the module's `environmentFile` option.
+- **Config:** `RESTIC_REPOSITORY=` and `RESTIC_PASSWORD=` live in `secrets/restic.env.age` (agenix). Decrypted at activation to `/run/agenix/restic-env`, threaded in via the module's `environmentFile` option.
 - **Schedule:** `restic-backups-docker-volumes.timer` and `restic-backups-seafile-data.timer` both fire daily at 03:00 (30m randomised delay) on `homeserver`.
 - **Scope:** Docker volumes (`/mnt/data/docker/volumes`, tagged `docker-volumes`, excludes `*.tmp`/`*.log`) + Seafile data (`/mnt/data/seafile`, tagged `seafile-data`).
 - **Retention:** 7 daily, 4 weekly, 6 monthly snapshots. The module runs `restic forget --prune` after each backup via `pruneOpts`.
@@ -125,19 +125,33 @@ Producer → URL:
 
 Caveat for the Pi's USB drive: SMART passthrough depends on the enclosure's UAS/SAT support. Verify once with `sudo smartctl -a -d sat /dev/sda` on first deploy. If the enclosure is opaque, replace it with one that isn't — there's no software workaround.
 
-### Operator-managed files outside git (main)
+### Operator-managed files outside git
 
-Site-specific values and secrets that don't belong in Nix source live in operator-managed files. The main host expects:
+Two categories:
 
-| File | Purpose | Format |
+**(1) Workstation-side files** — needed to evaluate the flake / install. Live under `/etc/nixos/` on whichever workstation runs `nixos-anywhere`. Pulled in as flake path inputs (pure eval, captured into `flake.lock`):
+
+| File | Purpose |
+|---|---|
+| `/etc/nixos/site.nix` | deSEC subdomain + ACME contact email. Nix attrset: `{ acmeDomain = "..."; acmeEmail = "..."; }`. Threaded in as `siteConfig` via specialArgs. |
+| `/etc/nixos/operator.pub` | Operator's SSH pubkey, baked into the `operator` user's `authorized_keys` on both hosts. Typically `cp ~/.ssh/id_ed25519.pub /etc/nixos/operator.pub`. |
+| `/etc/nixos/main-host-key` + `.pub` | Pre-generated SSH host keypair for main. Private gets shipped at install time via `nixos-anywhere --extra-files`; pubkey is the agenix recipient for main's secrets (referenced by `secrets/secrets.nix`). |
+| `/etc/nixos/main-root-key.pub` | Pubkey of main's root SSH key (for restic SFTP to Pi). The matching private is encrypted in `secrets/main-root-sshkey.age`; the pubkey is a flake path input that ends up in Pi's `users.users.restic.openssh.authorizedKeys.keyFiles`. |
+
+**(2) Encrypted secrets in repo** — `secrets/*.age`, decrypted by agenix at activation time using main's SSH host key (and editable on the workstation by the operator using their own SSH key).
+
+| Secret | Decrypted to | Used by |
 |---|---|---|
-| `/etc/nixos/site.nix` | deSEC subdomain + ACME contact email; declared as a `flake.nix` path input (`flake = false`), threaded in as `siteConfig` via specialArgs | Nix attrset: `{ acmeDomain = "..."; acmeEmail = "..."; }` |
-| `/etc/nixos/operator.pub` | SSH pubkey of whichever user installs; baked into the `operator` user's `authorized_keys` on both hosts at eval time via `flake.nix` path input (`flake = false`) | OpenSSH pubkey, typically `cp ~/.ssh/id_ed25519.pub /etc/nixos/operator.pub` |
-| `/etc/acme/credentials.env` | DNS provider API token used by `security.acme` | env file: `DESEC_TOKEN=...` |
-| `/etc/restic/env` | Restic repository URL + encryption password | env file: `RESTIC_REPOSITORY=...` / `RESTIC_PASSWORD=...` |
-| `hosts/main/.env` | Compose env vars (DOMAIN, service passwords, etc.); `DOMAIN` must match `site.acmeDomain` | env file |
+| `secrets/restic.env.age` | `/run/agenix/restic-env` | restic services + monthly deep check |
+| `secrets/acme-credentials.env.age` | `/run/agenix/acme-credentials` (owner `acme`) | `security.acme` for deSEC DNS-01 |
+| `secrets/main-root-sshkey.age` | `/root/.ssh/id_ed25519` (symlink → `/run/agenix/main-root-sshkey`) | restic SFTP client identity |
 
-On the Pi, `/etc/ntfy/url` holds the base URL of main's ntfy server (see the Notifications section above).
+**(3) Compose-side runtime config** — operator-managed, **not** agenix:
+
+| File | Purpose |
+|---|---|
+| `hosts/main/.env` | Compose env vars (DOMAIN, service passwords). DOMAIN must match `site.acmeDomain`. Operator-managed because Docker Compose reads it at `up` time, not via the Nix activation pipeline. |
+| `/etc/ntfy/url` (Pi only) | Main's ntfy base URL on the tailnet. Single-line file. Read at runtime by the alerts module. |
 
 ---
 

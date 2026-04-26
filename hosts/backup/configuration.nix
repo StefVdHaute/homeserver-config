@@ -6,7 +6,7 @@
 # Running other services here (Docker, edge-replicated services, etc.)
 # remains fine — they just must not touch the restic repo encryption keys.
 
-{ config, pkgs, ntfyNotify, operatorPubkeyPath, ... }:
+{ config, pkgs, ntfyNotify, operatorPubkeyPath, mainRootPubkeyPath, ... }:
 
 {
   imports = [
@@ -71,10 +71,11 @@
     home = "/var/lib/restic";
     createHome = true;
     shell = "${pkgs.util-linux}/bin/nologin";
-    openssh.authorizedKeys.keys = [
-      # TODO: paste main server's /root/.ssh/id_ed25519.pub here before
-      # deploy. See TODO.md "Automate restic host pubkey on Pi".
-    ];
+    # main's root pubkey, matched by the private key encrypted into
+    # secrets/main-root-sshkey.age (which agenix decrypts onto main at
+    # /root/.ssh/id_ed25519). Pubkey is operator-managed via the
+    # `mainRootPubkey` flake input → /etc/nixos/main-root-key.pub.
+    openssh.authorizedKeys.keyFiles = [ mainRootPubkeyPath ];
   };
   users.groups.restic = { };
 
