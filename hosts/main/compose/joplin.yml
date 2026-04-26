@@ -44,6 +44,42 @@ services:
       retries: 3
       start_period: 30s
 
+  # One-shot init: rotates the upstream-default admin@localhost / admin
+  # password to JOPLIN_ADMIN_PASSWORD as soon as joplin is healthy.
+  # Closes the LAN-reachable default-creds window. Idempotent — on
+  # subsequent runs the default login fails, container exits 0.
+  joplin-init:
+    image: alpine:3
+    container_name: joplin-init
+    restart: "no"
+    depends_on:
+      joplin:
+        condition: service_healthy
+    environment:
+      - JOPLIN_ADMIN_PASSWORD=${JOPLIN_ADMIN_PASSWORD}
+    networks:
+      - joplin-backend
+    command:
+      - sh
+      - -ec
+      - |
+        apk add --no-cache --quiet curl jq >&2
+        TOKEN=$$(curl -fsS -X POST \
+          -H "Content-Type: application/json" \
+          -d '{"email":"admin@localhost","password":"admin"}' \
+          http://joplin:22300/api/sessions 2>/dev/null | jq -r '.id // empty')
+        if [ -z "$$TOKEN" ]; then
+          echo "default admin login failed (already initialized) — skipping"
+          exit 0
+        fi
+        echo "logged in with default creds; rotating admin password..."
+        curl -fsS -X PATCH \
+          -H "X-Api-Auth: $$TOKEN" \
+          -H "Content-Type: application/json" \
+          -d "$$(jq -n --arg pw "$$JOPLIN_ADMIN_PASSWORD" '{password: $$pw}')" \
+          http://joplin:22300/api/users/1
+        echo "admin password rotated"
+
 volumes:
   joplin_db:
 

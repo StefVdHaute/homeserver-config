@@ -135,6 +135,8 @@ Edit `.env` and fill in all values:
 | `JWT_PRIVATE_KEY` | Generate with `pwgen -s 40 1` (min 32 chars) |
 | `VAULTWARDEN_ADMIN_TOKEN` | Generate with `openssl rand -hex 32` |
 | `JOPLIN_DB_PASSWORD` | Strong random password |
+| `JOPLIN_ADMIN_PASSWORD` | Joplin admin password the `joplin-init` container will set on first startup, replacing the upstream default `admin`. Save in your password manager — login at `https://joplin.${DOMAIN}` afterwards is `admin@localhost` + this. |
+| `PORTAINER_ADMIN_PASSWORD_HASH` | **bcrypt hash** of your chosen Portainer admin password — Portainer reads it via `--admin-password` and skips the first-run init wizard. Generate once with `docker run --rm httpd:alpine htpasswd -nbB admin '<password>' \| cut -d: -f2`, save the plaintext in your password manager, paste the hash here. |
 
 Generate passwords quickly:
 
