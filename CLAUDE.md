@@ -1,8 +1,8 @@
 # Home Server Config
 
-Fully reproducible two-host home setup using NixOS + Docker Compose, versioned in Git. A flake at the repo root ties both hosts to the same pinned nixpkgs.
+Fully reproducible NixOS setup spanning a home server (`homeserver`), a Pi backup target (`backupserver`), and the operator's workstation (`workstation`), versioned in Git. A flake at the repo root ties them all to the same pinned nixpkgs.
 
-This file is the single source of truth for architecture, decisions, and the behaviours this repo encodes. Operational setup steps live in each host's `README.md`; outstanding work lives in `TODO.md`.
+This file is the single source of truth for architecture, decisions, and the behaviours this repo encodes. Operational setup steps live in each host's `README.md`; the end-to-end install playbook is [`DEPLOY.md`](DEPLOY.md); outstanding work lives in `TODO.md`.
 
 ---
 
@@ -23,6 +23,14 @@ This file is the single source of truth for architecture, decisions, and the beh
 - **Future flex:** can host Docker containers for edge-replicated services at the Pi's location (slow uplink at that site — edge replicas avoid re-pulling over the link).
 - **Config:** `hosts/backup/`
 
+### `workstation` (operator's daily driver)
+
+- **Hardware:** Framework 16 with Ryzen 7000-series, 32GB RAM. Single NVMe (`/dev/nvme1n1`) — installed alongside an existing OS on a separate drive (dual-boot via UEFI menu, separate ESPs, no shared bootloader).
+- **Storage:** LUKS-encrypted btrfs `@nixos` subvolume at `/`. Boot SSD has its own ESP partition.
+- **Role:** Daily driver for the operator. Runs Hyprland (Wayland tiling compositor), Tailscale leaf, no service-hosting role. Holds the workstation-side operator key + host keys for managing main/Pi.
+- **Out of scope here:** user dotfiles (Hyprland config, shell rc, etc.) — those stay under GNU Stow at `~/.dotfiles`, not Nix-managed.
+- **Config:** `hosts/workstation/`
+
 ---
 
 ## Base OS: NixOS 25.11
@@ -31,7 +39,7 @@ This file is the single source of truth for architecture, decisions, and the beh
 - Everything versioned in Git
 - Tailscale for secure remote access
 - Auto-upgrades daily (only after successful backup)
-- First install is **nixos-anywhere + disko** for both hosts — see each host's README §1. Disk layouts live in `hosts/<host>/disko.nix`; platform stubs in `hosts/<host>/hardware-configuration.nix` are committed hand-authored (not machine-generated).
+- First install is **nixos-anywhere + disko** for all three hosts — see [`DEPLOY.md`](DEPLOY.md). Disk layouts live in `hosts/<host>/disko.nix`; platform stubs in `hosts/<host>/hardware-configuration.nix` are committed hand-authored (not machine-generated).
 
 ---
 
@@ -223,6 +231,9 @@ The deploy playbook's secrets-inventory section calls this out at install time �
 | `hosts/backup/disko.nix` | Declarative disk layout: SD (FAT32 firmware + btrfs `@nixos` at `/`) + external USB btrfs with `@homeserver` subvolume |
 | `hosts/backup/hardware-configuration.nix` | Hand-authored platform stub: aarch64, USB + MMC initrd modules |
 | `hosts/backup/README.md` | Pi backup-host setup guide |
+| `hosts/workstation/configuration.nix` | Workstation NixOS config (Hyprland, PipeWire, greetd/tuigreet, Tailscale leaf, no service-hosting) |
+| `hosts/workstation/disko.nix` | Declarative disk layout: ESP + LUKS-encrypted btrfs `@nixos` on `/dev/nvme1n1` |
+| `hosts/workstation/hardware-configuration.nix` | Hand-authored platform stub: AMD CPU + NVMe initrd modules; Framework 16-specific bits come from `nixos-hardware.nixosModules.framework-16-7040-amd` |
 
 ---
 

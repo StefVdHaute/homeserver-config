@@ -67,6 +67,17 @@
           ./hosts/backup/configuration.nix
         ];
       };
+
+      workstation = nixpkgs.lib.nixosSystem {
+        inherit specialArgs;
+        system = "x86_64-linux";
+        modules = [
+          nixos-hardware.nixosModules.framework-16-7040-amd
+          disko.nixosModules.disko
+          ./hosts/workstation/disko.nix
+          ./hosts/workstation/configuration.nix
+        ];
+      };
     };
   };
 }
