@@ -61,7 +61,7 @@ This file is the single source of truth for architecture, decisions, and the beh
 - Docker + Docker Compose
 - Docker data root: `/mnt/data/docker` (on RAID, not boot SSD)
 - Separate compose files per service
-- All images pinned to major versions
+- Images pinned to major versions where upstream publishes major tags (`caddy:2-alpine`, `ntfy:v2`, `postgres:16-alpine`, …); exact `x.y.z` where they don't (vaultwarden, portainer, joplin publish no major-only tags — WUD flags when the exact pins fall behind)
 
 ### Services (all as Docker containers)
 
@@ -105,7 +105,7 @@ Restic is not in the table above — it runs as a NixOS service (`services.resti
 
 - **Docker containers:** WUD monitors for available updates, user pulls manually
 - **NixOS:** Auto-upgrades daily at 04:30, only after successful backup
-- **Major versions:** Pinned in compose files, require manual tag change
+- **Versions:** Pinned in compose files, require manual tag change
 
 ### Notifications
 

@@ -1,6 +1,6 @@
 services:
   portainer:
-    image: portainer/portainer-ce:2
+    image: portainer/portainer-ce:2.43.0
     container_name: portainer
     restart: unless-stopped
     # Pre-set admin password via bcrypt hash so Portainer skips its
