@@ -420,7 +420,7 @@ sudo mdadm --monitor --scan --test --oneshot
 
 - **AdGuard `DynamicUser` state dir empty on first restic-adguard-state run.** Restic snapshot may capture an empty `/var/lib/AdGuardHome` if the wizard hasn't been completed yet. Do §6.4 before the next 03:00, otherwise the first snapshot is unusable for restore.
 
-- **First aarch64 Pi build is mostly cache hits.** The kernel is pinned to nixpkgs' `linuxPackages_rpi4` (Hydra-cached) precisely so the workstation never compiles a kernel under qemu; what remains (initrd assembly, systemd units) builds in minutes via binfmt + qemu-user-static.
+- **First aarch64 Pi build is mostly cache hits.** The kernel is pinned to mainline `linuxPackages` (channel-cached, unlike the deprecated/uncached rpi downstream kernels) precisely so neither the workstation (qemu) nor the Pi (auto-upgrade) ever compiles a kernel; what remains (initrd assembly, systemd units) builds in minutes via binfmt + qemu-user-static.
 
 - **Pi 4 EEPROM older than 2020-10-28 can't boot the SSD.** GPT + USB-boot support landed in that release. One boot of the Raspberry Pi Imager "Bootloader → USB Boot" utility SD fixes it permanently.
 

@@ -45,10 +45,13 @@ in
   boot.kernelModules = [ ];
   boot.extraModulePackages = [ ];
 
-  # Same 6.12.47-stable_20250916 source as nixos-hardware's default kernel,
-  # but the nixpkgs build is on cache.nixos.org — no kernel compile under
-  # qemu on workstation cross-builds.
-  boot.kernelPackages = pkgs.linuxPackages_rpi4;
+  # Mainline kernel, not a downstream rpi one: linuxPackages_rpi4 is
+  # deprecated in nixpkgs 26.05 and no longer cached, and nixos-hardware's
+  # replacement builds from source — this host must never compile a kernel
+  # (the Pi's auto-upgrade builds its own closure natively). Mainline is
+  # channel-cached and covers everything this headless host uses
+  # (USB/PCIe/genet ethernet/btrfs); no HDMI/WiFi/BT/camera here.
+  boot.kernelPackages = pkgs.linuxPackages;
 
   # Serial console for headless boot debugging (enable_uart=1 in config.txt).
   boot.kernelParams = [

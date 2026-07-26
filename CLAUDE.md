@@ -230,7 +230,7 @@ The deploy playbook's secrets-inventory section calls this out at install time �
 | `hosts/backup/configuration.nix` | Pi backup-host NixOS config (aarch64, btrfs, firewall, heartbeat-gated auto-upgrade, by-label `/mnt/backups` mount) |
 | `hosts/backup/disko.nix` | Declarative disk layout, OS SSD only: 1G FAT32 `/boot` + btrfs `@nixos` at `/` and `@projects` at `/srv/projects`. Data drive intentionally absent. |
 | `hosts/backup/disko-data.nix` | Standalone layout for the backup data drive (btrfs `backup-data`, `@homeserver` subvolume). Not flake-imported — manual disko run when provisioning a fresh drive only. |
-| `hosts/backup/hardware-configuration.nix` | Hand-authored platform stub: USB-root initrd modules (xhci/uas/sd), nixpkgs `linuxPackages_rpi4` pin (Hydra-cached), serial consoles, `installBootLoader` wrapper syncing Pi firmware + U-Boot into `/boot` |
+| `hosts/backup/hardware-configuration.nix` | Hand-authored platform stub: USB-root initrd modules (xhci/uas/sd), mainline kernel pin (channel-cached — no kernel compiles on Pi or workstation), serial consoles, `installBootLoader` wrapper syncing Pi firmware + U-Boot into `/boot` |
 | `hosts/backup/README.md` | Pi backup-host setup guide |
 | `hosts/workstation/configuration.nix` | Workstation NixOS config (Hyprland, PipeWire, greetd/tuigreet, Tailscale leaf, no service-hosting) |
 | `hosts/workstation/disko.nix` | Declarative disk layout: ESP + LUKS-encrypted btrfs `@nixos` on `/dev/nvme1n1` |
