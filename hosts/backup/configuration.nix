@@ -24,20 +24,33 @@
   alerts.tailscaleHealthcheck.enable = true;
 
   # ============================================================
-  # Swap — compressed in-RAM swap via zram. No disk wear (SD or USB),
-  # no btrfs-CoW gotcha that a swapfile on /mnt/backups would hit, and
-  # the Pi's workload (receiving SFTP pushes) rarely needs to swap out
-  # anyway. 50% of RAM as zstd-compressed swap gives effective ~100%
-  # RAM headroom on a Pi 4.
+  # Swap — compressed in-RAM swap via zram. No disk wear, no btrfs-CoW
+  # gotcha that a swapfile on /mnt/backups would hit, and the Pi's
+  # workload (receiving SFTP pushes) rarely needs to swap out anyway.
+  # 50% of RAM as zstd-compressed swap gives effective ~100% RAM
+  # headroom on a Pi 4.
   #
-  # Boot/bootloader wiring and /mnt/backups are declared outside this
-  # file: bootloader comes from nixos-hardware.nixosModules.raspberry-
-  # pi-4, disk layout + /mnt/backups mount come from ./disko.nix.
+  # Boot/bootloader wiring lives outside this file: extlinux + kernel
+  # from nixos-hardware.nixosModules.raspberry-pi-4, USB-boot chain in
+  # ./hardware-configuration.nix, OS disk layout in ./disko.nix.
   # ============================================================
   zramSwap = {
     enable = true;
     algorithm = "zstd";
     memoryPercent = 50;
+  };
+
+  # ============================================================
+  # Storage — backup data drive
+  # Deliberately outside disko so no install/reinstall can ever format
+  # the restic repo; provisioning a fresh drive is a manual run of
+  # ./disko-data.nix. By-label mount keeps /dev/sdX enumeration (two
+  # USB drives) irrelevant.
+  # ============================================================
+  fileSystems."/mnt/backups" = {
+    device = "/dev/disk/by-label/backup-data";
+    fsType = "btrfs";
+    options = [ "subvol=@homeserver" "compress=zstd:3" "noatime" "nofail" ];
   };
 
   # ============================================================
