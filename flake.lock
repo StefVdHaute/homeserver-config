@@ -163,8 +163,8 @@
     "site": {
       "flake": false,
       "locked": {
-        "lastModified": 1776887615,
-        "narHash": "sha256-/5jeoJ6aM3xHXfD92vUdPvNmdZSOE8K93gqaITTuwl0=",
+        "lastModified": 1785103191,
+        "narHash": "sha256-2SnkQdcU1bFsMSfHh74ikVnqjcK2sCdwNUZbzXKyHw8=",
         "path": "/etc/nixos/site.nix",
         "type": "path"
       },
