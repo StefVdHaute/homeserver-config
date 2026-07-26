@@ -18,7 +18,7 @@ This file is the single source of truth for architecture, decisions, and the beh
 
 ### `backupserver` (Pi backup target)
 
-- **Hardware:** Raspberry Pi 4, SD boot, external USB SSD on btrfs (single drive now; btrfs RAID 1 conversion path reserved for when a second drive is added)
+- **Hardware:** Raspberry Pi 4, no SD card — boots from a ~240GB SATA SSD in a USB adapter via EEPROM USB boot (GPT; needs bootloader ≥ 2020-10-28). OS SSD carries btrfs `@nixos` at `/` plus `@projects` at `/srv/projects` for side projects, and a 1G FAT32 `/boot` holding the whole boot chain (Pi firmware + U-Boot + extlinux + kernels — U-Boot can't read into btrfs subvolumes). Second external USB SSD on btrfs holds backup data (single drive now; btrfs RAID 1 conversion path reserved for when a second drive is added). The data drive is excluded from disko so no reinstall can format the restic repo.
 - **Role:** Receives restic backups from `homeserver` over SSH/SFTP via Tailscale. Does not hold the restic password (encryption keys stay on main so a Pi compromise cannot decrypt backups).
 - **Future flex:** can host Docker containers for edge-replicated services at the Pi's location (slow uplink at that site — edge replicas avoid re-pulling over the link).
 - **Config:** `hosts/backup/`
@@ -39,7 +39,7 @@ This file is the single source of truth for architecture, decisions, and the beh
 - Everything versioned in Git
 - Tailscale for secure remote access
 - Auto-upgrades daily (only after successful backup)
-- First install is **nixos-anywhere + disko** for all three hosts — see [`DEPLOY.md`](DEPLOY.md). Disk layouts live in `hosts/<host>/disko.nix`; platform stubs in `hosts/<host>/hardware-configuration.nix` are committed hand-authored (not machine-generated).
+- First install is **nixos-anywhere + disko** for main and workstation; the Pi's OS SSD is flashed **directly on the workstation** (disko + `nixos-install --system`, aarch64 via binfmt) and then moved to the Pi — see [`DEPLOY.md`](DEPLOY.md). Disk layouts live in `hosts/<host>/disko.nix`; platform stubs in `hosts/<host>/hardware-configuration.nix` are committed hand-authored (not machine-generated).
 
 ---
 
@@ -160,7 +160,7 @@ Two categories:
 |---|---|
 | `hosts/main/.env` | Compose env vars (DOMAIN, service passwords). DOMAIN must match `site.acmeDomain`. Operator-managed because Docker Compose reads it at `up` time, not via the Nix activation pipeline. |
 | `/etc/ntfy/url` (Pi only) | Main's ntfy base URL on the tailnet. Single-line file. Read at runtime by the alerts module. |
-| `/etc/tailscale/authkey` (Pi only) | Tailscale auth key, one-line. Shipped via `nixos-anywhere --extra-files` at install; tailscaled reads on first boot to register. Main side uses agenix instead. |
+| `/etc/tailscale/authkey` (Pi only) | Tailscale auth key, one-line. Seeded onto the OS SSD at flash time (decrypted from `secrets/tailscale-authkey.age`); tailscaled reads on first boot to register. Main side uses agenix instead. |
 
 ---
 
@@ -190,10 +190,10 @@ Most common scenario: main's drives die, fire, theft. Pi still holds the encrypt
 
 ### Pi loss (main + workstation intact)
 
-Main keeps running; backup target is gone. Repo on Pi was the only copy of historical snapshots — those are lost. Rebuild:
+Main keeps running; backup target is gone. If only the Pi's OS SSD died, the data drive (and all snapshots) survives — re-flash the OS SSD per DEPLOY.md §4 and reattach; nothing in the install path can format the data drive. If the data drive itself is lost:
 
-1. Replace Pi hardware. Re-run nixos-anywhere as documented.
-2. Main's next 03:00 restic timer re-initializes a fresh repo on the new Pi (`initialize = true`) and seeds it.
+1. Replace the hardware. Re-flash the OS SSD on the workstation, provision the new data drive via `disko-data.nix` (DEPLOY.md §4).
+2. Main's next 03:00 restic timer re-initializes a fresh repo on the new drive (`initialize = true`) and seeds it.
 3. Snapshot history before the loss is gone; current state is preserved (still on main).
 
 ### Catastrophic loss (main + workstation BOTH gone)
@@ -227,9 +227,10 @@ The deploy playbook's secrets-inventory section calls this out at install time �
 | `hosts/main/.env.example` | Main-host environment variable template |
 | `hosts/main/compose/*.yml` | Docker Compose files (one per service) |
 | `hosts/main/README.md` | Main-host setup guide |
-| `hosts/backup/configuration.nix` | Pi backup-host NixOS config (aarch64, btrfs, firewall, heartbeat-gated auto-upgrade) |
-| `hosts/backup/disko.nix` | Declarative disk layout: SD (FAT32 firmware + btrfs `@nixos` at `/`) + external USB btrfs with `@homeserver` subvolume |
-| `hosts/backup/hardware-configuration.nix` | Hand-authored platform stub: aarch64, USB + MMC initrd modules |
+| `hosts/backup/configuration.nix` | Pi backup-host NixOS config (aarch64, btrfs, firewall, heartbeat-gated auto-upgrade, by-label `/mnt/backups` mount) |
+| `hosts/backup/disko.nix` | Declarative disk layout, OS SSD only: 1G FAT32 `/boot` + btrfs `@nixos` at `/` and `@projects` at `/srv/projects`. Data drive intentionally absent. |
+| `hosts/backup/disko-data.nix` | Standalone layout for the backup data drive (btrfs `backup-data`, `@homeserver` subvolume). Not flake-imported — manual disko run when provisioning a fresh drive only. |
+| `hosts/backup/hardware-configuration.nix` | Hand-authored platform stub: USB-root initrd modules (xhci/uas/sd), nixpkgs `linuxPackages_rpi4` pin (Hydra-cached), serial consoles, `installBootLoader` wrapper syncing Pi firmware + U-Boot into `/boot` |
 | `hosts/backup/README.md` | Pi backup-host setup guide |
 | `hosts/workstation/configuration.nix` | Workstation NixOS config (Hyprland, PipeWire, greetd/tuigreet, Tailscale leaf, no service-hosting) |
 | `hosts/workstation/disko.nix` | Declarative disk layout: ESP + LUKS-encrypted btrfs `@nixos` on `/dev/nvme1n1` |

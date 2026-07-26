@@ -11,7 +11,7 @@ End-to-end walltime: **~3–4 h** for a first-timer, **~1.5 h** once you've done
 ### 1.1 Hardware
 
 - **Main:** dual-Xeon-ish, DDR3, 32–48 GB RAM. 250 GB boot SSD on `/dev/sda`. Four 1 TB spinners on `/dev/sdb..e` (mdadm RAID 10 + btrfs `@data` at `/mnt/data`).
-- **Pi:** Raspberry Pi 4 (any RAM variant). microSD ≥ 16 GB. External USB SSD/HDD with UAS/SAT passthrough (verify with `sudo smartctl -a -d sat /dev/sda` once booted — opaque enclosures have no software workaround; replace).
+- **Pi:** Raspberry Pi 4 (any RAM variant) with EEPROM bootloader ≥ 2020-10-28 (GPT + USB boot; any board bought 2021+ qualifies — older ones need one boot of the Raspberry Pi Imager "Bootloader → USB Boot" utility SD). ~240 GB SATA SSD in a USB adapter as OS drive (flashed on the workstation, no SD needed). Second external USB SSD/HDD for backup data. Both USB bridges need UAS/SAT SMART passthrough (verify with `sudo smartctl -a -d sat <dev>` once booted — opaque enclosures have no software workaround; replace).
 - **Workstation:** Linux with Nix installed, LAN reachable to both targets.
 
 ### 1.2 Accounts
@@ -123,71 +123,97 @@ nix build .#nixosConfigurations.backup.config.system.build.toplevel --no-link --
 
 ---
 
-## 4. Pi install (≈ 45–90 min)
+## 4. Pi install (≈ 30–45 min)
 
-### 4.1 Flash throwaway Linux to SD (≈ 10 min)
+The Pi's OS SSD is flashed **directly on the workstation** — plug the drive (in its USB adapter) into the workstation; no throwaway SD, no nixos-anywhere. The Pi 4 boots it via EEPROM USB boot.
 
-Any Linux image with SSH-as-root works as a kexec starting point — Raspberry Pi OS Lite, Ubuntu Server for Pi, NixOS aarch64 SD image. Flash, boot, enable root SSH, note the LAN IP:
+### 4.1 Build + flash the OS SSD (≈ 15–25 min)
 
-```bash
-# On the Pi after first boot:
-sudo systemctl enable --now ssh
-ip -br a              # note the LAN IP
-```
-
-Plug in the external USB drive. Disko **wipes** both `/dev/mmcblk0` (SD) and `/dev/sda` (USB) — verify `lsblk` first.
-
-### 4.2 Stage `--extra-files` for the Tailscale authkey
+Confirm the drive's by-id path matches `device =` in `hosts/backup/disko.nix` (with two USB drives on the Pi, `/dev/sdX` is a race — by-id is authoritative):
 
 ```bash
-mkdir -p /tmp/pi-extra/etc/tailscale
-echo 'tskey-auth-...' > /tmp/pi-extra/etc/tailscale/authkey
-chmod 0600 /tmp/pi-extra/etc/tailscale/authkey
+ls -l /dev/disk/by-id/ | grep usb
 ```
 
-(Same auth key as the main install — it's reusable.)
-
-### 4.3 Run nixos-anywhere (≈ 30–60 min first time)
-
-Most of the wait is the first aarch64 closure build via qemu-user-static; subsequent runs hit cache.
+Build the closure, then format + install. Disko touches **only** the OS SSD — the backup data drive is deliberately not in `disko.nix`, so reinstalls can never wipe the restic repo:
 
 ```bash
-nix run --extra-experimental-features 'nix-command flakes' \
-  github:nix-community/nixos-anywhere -- \
-  --flake ~/server_config#backup \
-  --target-host root@<pi-lan-ip> \
-  --extra-files /tmp/pi-extra
+cd ~/server_config
+nix build .#nixosConfigurations.backup.config.system.build.toplevel -o /tmp/backup-toplevel
 
-rm -rf /tmp/pi-extra
+sudo nix run --extra-experimental-features 'nix-command flakes' \
+  github:nix-community/disko -- --mode destroy,format,mount --flake .#backup
+
+sudo nix shell --extra-experimental-features 'nix-command flakes' \
+  nixpkgs#nixos-install-tools -c \
+  nixos-install --system "$(readlink -f /tmp/backup-toplevel)" \
+  --root /mnt --no-root-passwd --no-channel-copy
 ```
 
-Disko: SD → 512MB FAT32 firmware + btrfs `@nixos` root with zstd compression; USB → btrfs `backup-data` with `@homeserver` subvolume mounted at `/mnt/backups`. Then flake closure, then reboot.
+The install's bootloader step (aarch64, runs under qemu binfmt from §2.1) populates `/boot` with extlinux + kernels **and** the Pi firmware/U-Boot chain — see the `installBootLoader` wrapper in `hosts/backup/hardware-configuration.nix`.
 
-### 4.4 Approve on tailnet, SSH, passwd (≈ 5 min)
+Set the operator password while the disk is still mounted (first-boot SSH is key-only and `sudo` needs a password):
 
-The Pi tailscaled reads the auth key on first boot and registers itself. Approve `backupserver` in the [Tailscale admin](https://login.tailscale.com/admin/machines), then:
+```bash
+sudo nix shell --extra-experimental-features 'nix-command flakes' \
+  nixpkgs#nixos-install-tools -c \
+  nixos-enter --root /mnt -- passwd operator
+```
+
+### 4.2 Seed operator files onto the SSD
+
+```bash
+sudo install -d -m 0755 /mnt/etc/tailscale /mnt/etc/ntfy
+
+cd ~/server_config/secrets
+$AGENIX -i ~/.ssh/id_ed25519 -d tailscale-authkey.age | sudo tee /mnt/etc/tailscale/authkey >/dev/null
+sudo chmod 0600 /mnt/etc/tailscale/authkey
+
+sudo tee /mnt/etc/ntfy/url >/dev/null <<< "https://ntfy.<your-domain>"
+sudo chmod 0600 /mnt/etc/ntfy/url
+
+cd ~/server_config && sudo umount -R /mnt
+```
+
+Tailscale auth keys expire after ≤ 90 days. If the one in `secrets/tailscale-authkey.age` is stale, generate a fresh reusable key in the [Tailscale admin](https://login.tailscale.com/admin/settings/keys), re-encrypt it (`$AGENIX -e tailscale-authkey.age`), and re-run the seed step.
+
+### 4.3 Boot the Pi from USB
+
+Unplug the SSD from the workstation, plug both drives into the Pi's USB 3 (blue) ports, **no SD card inserted**, power on. The EEPROM's default boot order falls through to USB when no SD is present.
+
+- Board older than ~2021: flash the Raspberry Pi Imager "Misc utility images → Bootloader → USB Boot" image to any SD, boot it once (steady green LED = done), then retry.
+- Optional hardening: set `BOOT_ORDER=0xf14` (USB first) so a forgotten SD can never shadow the SSD.
+
+### 4.4 Approve on tailnet, SSH (≈ 5 min)
+
+The Pi tailscaled reads the seeded auth key on first boot and registers itself. Approve `backupserver` in the [Tailscale admin](https://login.tailscale.com/admin/machines), then:
 
 ```bash
 ssh operator@backupserver.<your-tailnet>.ts.net
-sudo passwd operator
 ```
 
-### 4.5 Write `/etc/ntfy/url`
+### 4.5 Provision the backup data drive (first install only)
 
-Pi's `smartd` and `tailscale-healthcheck` route alerts through main's ntfy:
+The data drive is formatted **manually, on the Pi** — never as part of an OS install:
 
 ```bash
-sudo install -d -m 0755 /etc/ntfy
-sudo tee /etc/ntfy/url >/dev/null <<< "https://ntfy.<your-domain>"
+# On the Pi:
+git clone <your-repo-url> server_config && cd server_config/hosts/backup
+ls -l /dev/disk/by-id/ | grep usb        # find the data drive; set device= in disko-data.nix
+sudo nix run --extra-experimental-features 'nix-command flakes' \
+  github:nix-community/disko -- --mode destroy,format,mount ./disko-data.nix
+sudo systemd-tmpfiles --create           # creates /mnt/backups/homeserver for restic
 ```
 
-### 4.6 Verify SMART passthrough on the USB drive
+The runtime mount is by-label (`backup-data`) via `fileSystems` in `configuration.nix`, so this is a one-time step per drive.
+
+### 4.6 Verify SMART passthrough on both USB bridges
 
 ```bash
-sudo smartctl -a -d sat /dev/sda | head -40
+for d in /dev/disk/by-id/usb-*0:0; do echo "== $d"; sudo smartctl -a -d sat "$d" | head -40; done
 ```
 
-If the "Vendor Specific SMART Attributes" table appears, the alert path works. If not, replace the enclosure — opaque ones have no software workaround.
+If the "Vendor Specific SMART Attributes" table appears for both, the `home-smart` alert path works. If not, replace the offending enclosure — opaque ones have no software workaround.
 
 ---
 
@@ -394,7 +420,11 @@ sudo mdadm --monitor --scan --test --oneshot
 
 - **AdGuard `DynamicUser` state dir empty on first restic-adguard-state run.** Restic snapshot may capture an empty `/var/lib/AdGuardHome` if the wizard hasn't been completed yet. Do §6.4 before the next 03:00, otherwise the first snapshot is unusable for restore.
 
-- **First aarch64 Pi build dominates wall-clock.** ≈ 30–60 min on a modern workstation via binfmt + qemu-user-static. Most of the closure hits cache.nixos.org for substitutes.
+- **First aarch64 Pi build is mostly cache hits.** The kernel is pinned to nixpkgs' `linuxPackages_rpi4` (Hydra-cached) precisely so the workstation never compiles a kernel under qemu; what remains (initrd assembly, systemd units) builds in minutes via binfmt + qemu-user-static.
+
+- **Pi 4 EEPROM older than 2020-10-28 can't boot the SSD.** GPT + USB-boot support landed in that release. One boot of the Raspberry Pi Imager "Bootloader → USB Boot" utility SD fixes it permanently.
+
+- **Two SSDs share the Pi 4's ~1.2 A USB power budget.** Fine on the official 3 A PSU; USB resets in `dmesg` mean the data drive needs a powered hub.
 
 - **Caddy must be up before any other compose service is meaningful.** Services start without Caddy but are unreachable via HTTPS until Caddy's running.
 
@@ -414,7 +444,8 @@ sudo mdadm --monitor --scan --test --oneshot
 
 ### During install
 
-- **nixos-anywhere fails partway through disko/install.** Target is in an indeterminate state. Cleanest: reboot into the original live medium and re-run nixos-anywhere — disko is destructive and re-runs are safe.
+- **nixos-anywhere fails partway through disko/install (main).** Target is in an indeterminate state. Cleanest: reboot into the original live medium and re-run nixos-anywhere — disko is destructive and re-runs are safe.
+- **Pi flash fails partway.** Re-run §4.1 from the workstation — the OS SSD gets re-wiped, and the data drive is untouchable by construction (not in `disko.nix`).
 - **nixos-rebuild switch fails post-install.** NixOS keeps the previous generation active. Fall back with `sudo nixos-rebuild switch --rollback`.
 
 ### Post-install
@@ -440,6 +471,6 @@ sudo mdadm --monitor --scan --test --oneshot
 | `secrets/tailscale-authkey.age` | Repo (encrypted) | Reusable Tailscale auth key | Low — generate a new one in the Tailscale admin, re-encrypt. |
 | `hosts/main/.env` | Main (gitignored, in repo clone) | Compose env: DOMAIN + service passwords + Portainer hash + Joplin admin password | Medium — recreate from password manager. |
 | `/etc/ntfy/url` | Pi | Main's ntfy base URL | Low — recreate from known value. |
-| `/etc/tailscale/authkey` | Pi | Tailscale auth key (one-line) | Low — same key works on next install. |
+| `/etc/tailscale/authkey` | Pi (seeded onto the SSD at flash time) | Tailscale auth key (one-line) | Low — generate a new one (they expire ≤ 90 days), re-encrypt, re-seed. |
 
 **Off-site escrow priority:** save the **plaintext `RESTIC_PASSWORD`** to a password manager that's not hosted on main (Bitwarden cloud, 1Password, Proton Pass) when you generate it in §2.4. Without it, a complete loss of *both* main and your workstation = unrecoverable backups. See [`CLAUDE.md`](CLAUDE.md) § Disaster recovery for the full posture and recovery procedure.
