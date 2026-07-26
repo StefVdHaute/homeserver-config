@@ -110,7 +110,7 @@ in
     domain = site.acmeDomain;
     extraDomainNames = [ "*.${site.acmeDomain}" ];
     dnsProvider = "desec";
-    credentialsFile = config.age.secrets.acme-credentials.path;
+    environmentFile = config.age.secrets.acme-credentials.path;   # 26.05: renamed from credentialsFile
     group = "caddy-certs";
     reloadServices = [ "caddy-reload-certs.service" ];
   };
@@ -423,5 +423,5 @@ in
     ];
   };
 
-  system.stateVersion = "25.11";
+  system.stateVersion = "26.05";
 }

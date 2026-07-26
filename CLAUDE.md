@@ -33,7 +33,7 @@ This file is the single source of truth for architecture, decisions, and the beh
 
 ---
 
-## Base OS: NixOS 25.11
+## Base OS: NixOS 26.05
 
 - Declarative, fully reproducible
 - Everything versioned in Git
