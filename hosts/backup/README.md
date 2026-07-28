@@ -90,6 +90,8 @@ for d in /dev/disk/by-id/usb-*0:0; do echo "== $d"; sudo smartctl -a -d sat "$d"
 
 If SMART attributes come through (look for the "Vendor Specific SMART Attributes" table), the alert path works. If not, that enclosure is opaque to SMART — replace it; there's no software workaround.
 
+Monitored devices are listed **explicitly by by-id path** in `alerts.smartd.devices` (`configuration.nix`) — smartd's `DEVICESCAN` finds nothing when combined with `-d sat`, since sat is a pass-through protocol rather than a scannable class. When provisioning the data drive, add its by-id path to that list.
+
 ---
 
 ## 6. `/etc/ntfy/url`

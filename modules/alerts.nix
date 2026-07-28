@@ -79,6 +79,17 @@ in
           SMART commands are forwarded to the underlying SATA disk.
         '';
       };
+      devices = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ ];
+        example = [ "/dev/disk/by-id/usb-Vendor_Model_Serial-0:0" ];
+        description = ''
+          Explicit devices to monitor (stable by-id paths recommended).
+          When non-empty, DEVICESCAN is disabled. Required together with
+          useDSat: `DEVICESCAN -d sat` scans zero devices, because sat is
+          a pass-through protocol rather than a scannable device class.
+        '';
+      };
     };
 
     tailscaleHealthcheck = {
@@ -136,6 +147,8 @@ in
       in {
         services.smartd = {
           enable = true;
+          autodetect = cfg.smartd.devices == [ ];
+          devices = map (d: { device = d; }) cfg.smartd.devices;
           defaults.monitored = "-a${lib.optionalString cfg.smartd.useDSat " -d sat"} -o on -s (S/../.././02|L/../../6/03) -M exec ${smartdNtfy}/bin/smartd-ntfy";
         };
       }

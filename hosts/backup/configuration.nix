@@ -21,6 +21,9 @@
   alerts.smartd = {
     enable = true;
     useDSat = true;   # USB-SATA bridge needs -d sat for SMART passthrough
+    # Explicit by-id list — DEVICESCAN can't scan with -d sat. Add the
+    # data drive's by-id here when it's provisioned.
+    devices = [ "/dev/disk/by-id/usb-WDC_WDS2_40G2G0A-00JH30_0000000001A7-0:0" ];
   };
   alerts.tailscaleHealthcheck.enable = true;
 
