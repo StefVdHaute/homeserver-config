@@ -219,6 +219,7 @@ The deploy playbook's secrets-inventory section calls this out at install time �
 | `CLAUDE.md` | This file — architecture + decisions |
 | `DEPLOY.md` | First-install playbook (workstation prep → Pi → main → smoke tests) |
 | `TODO.md` | Outstanding tasks |
+| `modules/common.nix` | Shared baseline package set (git, vim, htop, curl, wget, usbutils). Imported by all three hosts. |
 | `modules/alerts.nix` | Shared NixOS module: ntfy helper, smartd wiring, templated failure notifiers. Imported by both hosts. |
 | `hosts/main/configuration.nix` | Main host NixOS config (boot, RAID, Docker, SSH, Tailscale, firewall, auto-upgrade) |
 | `hosts/main/disko.nix` | Declarative disk layout: boot SSD (ESP + swap + btrfs `@nixos` at `/`) + mdadm RAID 10 over 4 spinners with btrfs `@data` at `/mnt/data` |

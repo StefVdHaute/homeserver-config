@@ -50,6 +50,7 @@ in
 {
   imports = [
     ./hardware-configuration.nix
+    ../../modules/common.nix
     ../../modules/alerts.nix
   ];
 
@@ -256,14 +257,10 @@ in
   # ============================================================
   # Basic Packages
   # ============================================================
+  # Baseline CLI tools come from modules/common.nix
   environment.systemPackages = with pkgs; [
-    git
-    vim
-    htop
     mdadm
     docker-compose
-    curl
-    wget
     restic
     pwgen       # needed to generate Seafile JWT_PRIVATE_KEY
   ];

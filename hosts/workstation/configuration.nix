@@ -3,6 +3,7 @@
 {
   imports = [
     ./hardware-configuration.nix
+    ../../modules/common.nix
   ];
 
   boot.loader.systemd-boot.enable = true;
@@ -102,13 +103,9 @@
     fileSystems = [ "/" ];
   };
 
+  # Baseline CLI tools come from modules/common.nix
   environment.systemPackages = with pkgs; [
-    git
     stow
-    vim
-    htop
-    curl
-    wget
     alacritty
     waybar
     wofi

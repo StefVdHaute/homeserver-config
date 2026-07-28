@@ -11,6 +11,7 @@
 {
   imports = [
     ./hardware-configuration.nix
+    ../../modules/common.nix
     ../../modules/alerts.nix
   ];
 
@@ -174,13 +175,12 @@
   # ============================================================
   # Packages — minimal by default. Adding Docker etc. later is a one-liner.
   # ============================================================
+  # Baseline CLI tools come from modules/common.nix
   environment.systemPackages = with pkgs; [
-    git
-    vim
-    htop
     tailscale
     btrfs-progs
     smartmontools
+    docker-compose
   ];
 
   # ============================================================
