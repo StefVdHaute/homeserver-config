@@ -67,10 +67,12 @@ in
   # nixos-install AND each rebuild/auto-upgrade) also syncs Pi firmware +
   # U-Boot into /boot. config.txt is Nix-owned — hand edits get clobbered.
   system.build.installBootLoader = lib.mkForce (
+    # writeShellScript sets no PATH and switch-to-configuration runs this
+    # in a minimal systemd-run env — every command needs its store path.
     pkgs.writeShellScript "install-rpi4-bootloader" ''
       set -euo pipefail
       ${config.boot.loader.generic-extlinux-compatible.populateCmd} -c "$1" -d /boot
-      cp ${firmware}/* /boot/
+      ${pkgs.coreutils}/bin/cp ${firmware}/* /boot/
     ''
   );
 }
