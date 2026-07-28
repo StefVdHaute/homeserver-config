@@ -46,14 +46,14 @@ grep interpreter /proc/sys/fs/binfmt_misc/qemu-aarch64
 cd ~ && git clone <repo-url> server_config && cd server_config
 ```
 
-### 2.3 Operator-managed files in `/etc/nixos/`
+### 2.3 Operator-managed files
 
-Four files, pulled in as flake path inputs (pure eval throughout, content captured into `flake.lock`):
+Two files under `/etc/nixos/` (the `site.nix` flake input + main's host key), plus the public keys that live **in the repo** under `keys/` — a fork replaces those with its own:
 
 ```bash
 sudo install -d -m 0755 /etc/nixos
 
-# Per-site values (domain + ACME email)
+# Per-site values (domain + ACME email) — deliberately outside git
 sudo install -m 0644 -o root -g root /dev/null /etc/nixos/site.nix
 sudo tee /etc/nixos/site.nix >/dev/null <<'EOF'
 {
@@ -62,18 +62,22 @@ sudo tee /etc/nixos/site.nix >/dev/null <<'EOF'
 }
 EOF
 
-# Operator pubkey — into both hosts' `operator` user authorized_keys
-sudo cp ~/.ssh/id_ed25519.pub /etc/nixos/operator.pub
-
 # Main's SSH host keypair — private ships at install via --extra-files;
 # pubkey is the agenix recipient for main's secrets.
 sudo ssh-keygen -t ed25519 -N "" -f /etc/nixos/main-host-key -C "main@homeserver"
 
+# Operator pubkey — committed to the repo, baked into both hosts'
+# `operator` user authorized_keys:
+cp ~/.ssh/id_ed25519.pub keys/operator.pub   # then edit the comment if you like
+
 # Main's root SSH keypair — for restic SFTP into Pi. Private gets
-# encrypted into secrets/main-root-sshkey.age; pubkey is a flake input
-# baked into Pi's restic authorized_keys.
-sudo ssh-keygen -t ed25519 -N "" -f /etc/nixos/main-root-key -C "main-root@homeserver"
+# encrypted into secrets/main-root-sshkey.age; PUBKEY goes into the repo:
+ssh-keygen -t ed25519 -N "" -f /tmp/main-root-key -C "main-root@homeserver"
+cp /tmp/main-root-key.pub keys/main-root.pub
+# (encrypt /tmp/main-root-key in §2.4, then shred it)
 ```
+
+Commit the `keys/` changes — git is their distribution channel; on-device rebuilds (auto-upgrade) depend on it.
 
 ### 2.4 Encrypt the four agenix secrets
 

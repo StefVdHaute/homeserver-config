@@ -12,7 +12,7 @@ The Pi boots from a SATA SSD in a USB adapter (EEPROM USB boot) — there is no 
 - Both USB bridges must pass SMART through (`-d sat`); verify in §5
 - Tailnet already set up and reachable from `homeserver`
 - A workstation with Nix, aarch64 binfmt (DEPLOY.md §2.1), and this repo clone — the SSD is flashed there, so it must be plugged into the workstation
-- Workstation prep per main README §1.1 (all four `/etc/nixos/*` files): `operator.pub` baked into the Pi's `operator` user, `main-root-key.pub` baked into the Pi's `restic` user authorized_keys via flake input. No manual paste step on the Pi side.
+- Workstation prep per DEPLOY.md §2.3: the repo's `keys/operator.pub` is baked into the Pi's `operator` user, `keys/main-root.pub` into the Pi's `restic` user authorized_keys. No manual paste step on the Pi side, and no `/etc/nixos` files needed on the Pi.
 
 ---
 

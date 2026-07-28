@@ -137,14 +137,14 @@ Caveat for the Pi's USB drive: SMART passthrough depends on the enclosure's UAS/
 
 Two categories:
 
-**(1) Workstation-side files** — needed to evaluate the flake / install. Live under `/etc/nixos/` on whichever workstation runs `nixos-anywhere`. Pulled in as flake path inputs (pure eval, captured into `flake.lock`):
+**(1) Workstation-side files** — live under `/etc/nixos/` on the operator's workstation. Only `site.nix` is still a flake path input; note `flake.lock` merely *verifies* path inputs (narHash) — it cannot supply their content, so the file must exist on any machine that evaluates the main host (main materializes it onto its own disk via `environment.etc` so auto-upgrades keep working). SSH **public** keys live in the repo under `keys/` — they used to be path inputs, which broke every on-device rebuild.
 
 | File | Purpose |
 |---|---|
-| `/etc/nixos/site.nix` | deSEC subdomain + ACME contact email. Nix attrset: `{ acmeDomain = "..."; acmeEmail = "..."; }`. Threaded in as `siteConfig` via specialArgs. |
-| `/etc/nixos/operator.pub` | Operator's SSH pubkey, baked into the `operator` user's `authorized_keys` on both hosts. Typically `cp ~/.ssh/id_ed25519.pub /etc/nixos/operator.pub`. |
+| `/etc/nixos/site.nix` | deSEC subdomain + ACME contact email. Nix attrset: `{ acmeDomain = "..."; acmeEmail = "..."; }`. Threaded in as `siteConfig` via specialArgs; kept out of git deliberately. |
 | `/etc/nixos/main-host-key` + `.pub` | Pre-generated SSH host keypair for main. Private gets shipped at install time via `nixos-anywhere --extra-files`; pubkey is the agenix recipient for main's secrets (referenced by `secrets/secrets.nix`). |
-| `/etc/nixos/main-root-key.pub` | Pubkey of main's root SSH key (for restic SFTP to Pi). The matching private is encrypted in `secrets/main-root-sshkey.age`; the pubkey is a flake path input that ends up in Pi's `users.users.restic.openssh.authorizedKeys.keyFiles`. |
+| `keys/operator.pub` (in repo) | Operator's SSH pubkey, baked into the `operator` user's `authorized_keys` on both hosts. Forks replace it with their own. |
+| `keys/main-root.pub` (in repo) | Pubkey of main's root SSH key (for restic SFTP to Pi); ends up in Pi's `users.users.restic.openssh.authorizedKeys.keyFiles`. Matching private is encrypted in `secrets/main-root-sshkey.age`. |
 
 **(2) Encrypted secrets in repo** — `secrets/*.age`, decrypted by agenix at activation time using main's SSH host key (and editable on the workstation by the operator using their own SSH key).
 
@@ -215,6 +215,7 @@ The deploy playbook's secrets-inventory section calls this out at install time �
 | File | Purpose |
 |---|---|
 | `flake.nix` | Pinned nixpkgs + `nixosConfigurations.main` / `.backup` |
+| `keys/*.pub` | Public keys distributed via git: operator SSH key + main's root key (restic SFTP identity) |
 | `README.md` | Top-level index for both hosts |
 | `CLAUDE.md` | This file — architecture + decisions |
 | `DEPLOY.md` | First-install playbook (workstation prep → Pi → main → smoke tests) |

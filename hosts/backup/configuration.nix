@@ -112,8 +112,8 @@
     isNormalUser = true;
     extraGroups = [ "wheel" "docker" ];
     # Operator pubkey comes in as `operatorPubkeyPath` via specialArgs
-    # from flake.nix (path input to /etc/nixos/operator.pub). Pure eval;
-    # SSH works immediately after first boot. Mirrors main.
+    # from flake.nix (repo file keys/operator.pub). SSH works immediately
+    # after first boot. Mirrors main.
     openssh.authorizedKeys.keyFiles = [ operatorPubkeyPath ];
   };
 
@@ -129,8 +129,7 @@
     shell = "${pkgs.util-linux}/bin/nologin";
     # main's root pubkey, matched by the private key encrypted into
     # secrets/main-root-sshkey.age (which agenix decrypts onto main at
-    # /root/.ssh/id_ed25519). Pubkey is operator-managed via the
-    # `mainRootPubkey` flake input → /etc/nixos/main-root-key.pub.
+    # /root/.ssh/id_ed25519). Pubkey is the repo file keys/main-root.pub.
     openssh.authorizedKeys.keyFiles = [ mainRootPubkeyPath ];
   };
   users.groups.restic = { };

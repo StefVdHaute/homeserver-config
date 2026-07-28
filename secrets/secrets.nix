@@ -11,9 +11,9 @@
 let
   strip = s: builtins.replaceStrings [ "\n" ] [ "" ] s;
 
-  # Operator pubkey — same one the flake's `operatorPubkey` input baked
-  # into the `operator` user's authorized_keys on both hosts.
-  operator = strip (builtins.readFile /etc/nixos/operator.pub);
+  # Operator pubkey — same repo file (keys/operator.pub) baked into the
+  # `operator` user's authorized_keys on both hosts.
+  operator = strip (builtins.readFile ../keys/operator.pub);
 
   # main's SSH host pubkey. Pre-generated locally; the matching private
   # key gets shipped to /etc/ssh/ssh_host_ed25519_key on main at install

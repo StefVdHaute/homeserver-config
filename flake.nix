@@ -19,30 +19,25 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # Operator-managed files, outside git, resolved at flake-lock time
-    # and copied into the Nix store. Both paths must exist on whichever
-    # workstation runs `nixos-anywhere`. Pure eval throughout — no
-    # --impure flag needed for lock or build.
+    # Operator-managed file, outside git (per-site domain/email stay out
+    # of the repo). flake.lock only *verifies* path inputs (narHash), it
+    # can't supply them — so this file must exist on any machine that
+    # evaluates the main host. main materializes it onto its own disk via
+    # environment.etc so on-device auto-upgrades keep working. Public
+    # keys used to be path inputs too; they live in ./keys now.
     site = {
       url = "path:/etc/nixos/site.nix";
       flake = false;
     };
-    operatorPubkey = {
-      url = "path:/etc/nixos/operator.pub";
-      flake = false;
-    };
-    mainRootPubkey = {
-      url = "path:/etc/nixos/main-root-key.pub";
-      flake = false;
-    };
   };
 
-  outputs = { self, nixpkgs, disko, nixos-hardware, agenix, site, operatorPubkey, mainRootPubkey, ... }:
+  outputs = { self, nixpkgs, disko, nixos-hardware, agenix, site, ... }:
   let
     specialArgs = {
       siteConfig = import site;
-      operatorPubkeyPath = operatorPubkey;
-      mainRootPubkeyPath = mainRootPubkey;
+      sitePath = site;
+      operatorPubkeyPath = ./keys/operator.pub;
+      mainRootPubkeyPath = ./keys/main-root.pub;
     };
   in {
     nixosConfigurations = {

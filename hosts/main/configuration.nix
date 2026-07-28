@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ntfyNotify, siteConfig, operatorPubkeyPath, ... }:
+{ config, lib, pkgs, ntfyNotify, siteConfig, sitePath, operatorPubkeyPath, ... }:
 
 let
   # Per-site values come in as `siteConfig` via specialArgs from flake.nix
@@ -103,6 +103,13 @@ in
   # providers, replace the variable name accordingly and flip
   # `dnsProvider` below.
   # ============================================================
+  # Materialize the `site` flake input at its canonical path: flake.lock
+  # only verifies path inputs, so on-device rebuilds (auto-upgrade) need
+  # the file present locally. Caveat: after editing site.nix + relocking,
+  # the first rebuild must run from the workstation — the on-disk copy
+  # still has the old content until that rebuild lands.
+  environment.etc."nixos/site.nix".source = sitePath;
+
   security.acme = {
     acceptTerms = true;
     defaults.email = site.acmeEmail;
