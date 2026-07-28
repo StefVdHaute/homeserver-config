@@ -54,6 +54,25 @@
   };
 
   # ============================================================
+  # Docker — edge-replicated services / side projects. Data root lives
+  # on the @projects subvolume (mirrors main's data-root-off-the-OS
+  # pattern). Containers must never touch the restic repo or its keys —
+  # see the security invariant at the top of this file.
+  # ============================================================
+  virtualisation.docker = {
+    enable = true;
+    daemon.settings = {
+      data-root = "/srv/projects/docker";
+      # Same stdout caps as main — a chatty container can't fill the SSD.
+      log-driver = "json-file";
+      log-opts = {
+        max-size = "10m";
+        max-file = "3";
+      };
+    };
+  };
+
+  # ============================================================
   # Maintenance
   # ============================================================
   # Monthly btrfs scrub catches bit-rot proactively. Single-drive on
@@ -87,7 +106,7 @@
   # ============================================================
   users.users.operator = {
     isNormalUser = true;
-    extraGroups = [ "wheel" ];
+    extraGroups = [ "wheel" "docker" ];
     # Operator pubkey comes in as `operatorPubkeyPath` via specialArgs
     # from flake.nix (path input to /etc/nixos/operator.pub). Pure eval;
     # SSH works immediately after first boot. Mirrors main.

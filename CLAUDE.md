@@ -20,7 +20,7 @@ This file is the single source of truth for architecture, decisions, and the beh
 
 - **Hardware:** Raspberry Pi 4, no SD card — boots from a ~240GB SATA SSD in a USB adapter via EEPROM USB boot (GPT; needs bootloader ≥ 2020-10-28). OS SSD carries btrfs `@nixos` at `/` plus `@projects` at `/srv/projects` for side projects, and a 1G FAT32 `/boot` holding the whole boot chain (Pi firmware + U-Boot + extlinux + kernels — U-Boot can't read into btrfs subvolumes). Second external USB SSD on btrfs holds backup data (single drive now; btrfs RAID 1 conversion path reserved for when a second drive is added). The data drive is excluded from disko so no reinstall can format the restic repo.
 - **Role:** Receives restic backups from `homeserver` over SSH/SFTP via Tailscale. Does not hold the restic password (encryption keys stay on main so a Pi compromise cannot decrypt backups).
-- **Future flex:** can host Docker containers for edge-replicated services at the Pi's location (slow uplink at that site — edge replicas avoid re-pulling over the link).
+- **Edge services:** Docker is enabled (data root `/srv/projects/docker` on the `@projects` subvolume — the data drive stays restic-only) for edge-replicated services at the Pi's location (slow uplink at that site — edge replicas avoid re-pulling over the link). No compose files yet.
 - **Config:** `hosts/backup/`
 
 ### `workstation` (operator's daily driver)
