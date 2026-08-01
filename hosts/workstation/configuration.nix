@@ -59,6 +59,12 @@
     openssh.authorizedKeys.keyFiles = [ operatorPubkeyPath ];
   };
 
+  # The @games subvolume's root inode is created root-owned, so Steam (running
+  # as stef) can't write into it. NixOS fixes /home/stef itself on every
+  # activation, but not a nested mount — hence this. `d` adjusts an existing
+  # directory's owner and mode, and tmpfiles runs after local-fs.target.
+  systemd.tmpfiles.rules = [ "d /home/stef/Games 0755 stef users -" ];
+
   # uwsm starts Hyprland as a proper systemd user session, which is what
   # exports WAYLAND_DISPLAY / HYPRLAND_INSTANCE_SIGNATURE into the systemd
   # user environment — the waybar / hypridle / hyprpaper / hyprpolkitagent

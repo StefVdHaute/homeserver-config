@@ -10,9 +10,11 @@
 # Layout:
 #   <disk>-part1  — ESP (2 GB, FAT32, Limine)
 #   <disk>-part2  — LUKS-encrypted btrfs, subvolumes:
-#                       @nixos — mounted at /      (zstd:3, noatime)
-#                       @home  — mounted at /home  (zstd:3, noatime)
-#                       @swap  — mounted at /swap  (noatime, 40G swapfile)
+#                       @nixos — mounted at /                  (zstd:3, noatime)
+#                       @home  — mounted at /home              (zstd:3, noatime)
+#                       @log   — mounted at /var/log           (zstd:3, noatime)
+#                       @games — mounted at /home/stef/Games   (no compression)
+#                       @swap  — mounted at /swap              (noatime, 40G swapfile)
 #                     @home is split out so a rollback or reinstall of
 #                     the root subvolume doesn't take /home with it —
 #                     mirrors the existing Arch install's split (@,
@@ -70,6 +72,26 @@
                   "@home" = {
                     mountpoint = "/home";
                     mountOptions = [ "compress=zstd:3" "noatime" ];
+                  };
+                  # Split out so a root rollback doesn't discard the logs
+                  # explaining why it was needed. Compression stays on —
+                  # journals are text and compress very well. NixOS marks
+                  # /var/log needed-for-boot automatically (it's in
+                  # utils.pathsNeededForBoot), so no flag is required here.
+                  "@log" = {
+                    mountpoint = "/var/log";
+                    mountOptions = [ "compress=zstd:3" "noatime" ];
+                  };
+                  # Steam library. compress=no on purpose: game data is
+                  # already compressed, so zstd:3 spends write CPU for
+                  # ~nothing. Being its own subvolume also keeps it out of
+                  # any future @home snapshot — btrfs snapshots don't
+                  # recurse into nested subvolumes. Carved out now because
+                  # converting a full library directory later means moving
+                  # every byte.
+                  "@games" = {
+                    mountpoint = "/home/stef/Games";
+                    mountOptions = [ "compress=no" "noatime" ];
                   };
                   # No compression here — btrfs requires swapfiles be
                   # NODATACOW and uncompressed.
