@@ -388,6 +388,68 @@ Local facts already gathered (2026-07-31):
 
 ## Deferred
 
+- [ ] **The workstation has no backup story.** Verified 2026-08-01: `restic`
+      appears nowhere in `hosts/workstation/configuration.nix`; only
+      `hosts/main` runs `services.restic.backups`. There is also **no snapshot
+      tooling anywhere in the repo** — no snapper, no btrbk, only
+      `services.btrfs.autoScrub`.
+
+      Indirect coverage that does exist: anything in Seafile syncs to main →
+      `/mnt/data/seafile` → the `seafile-data` restic job → Pi, with version
+      history. Dotfiles are in git. **Not covered:** local work not pushed,
+      `~/Downloads`, VM images, Proton prefixes, and game saves outside Steam
+      Cloud.
+
+      ⚠️ Design tension to settle before extending restic here: CLAUDE.md's
+      stated posture is "restic password only lives on `homeserver`; a
+      compromise of the Pi cannot decrypt backups." A laptop that travels
+      holding that password erodes that deliberately-chosen property. Options:
+      (1) lean on Seafile and treat the laptop as disposable — no new secrets,
+      fits the existing design; (2) a **separate** repo + separate password for
+      a workstation job, so laptop compromise doesn't expose main's backups;
+      (3) same repo, shared password — simplest and the one that actually
+      weakens the model.
+- [x] **`@games` and `@log` added** (2026-08-01). btrfs snapshots don't recurse
+      into nested subvolumes, so these boundaries are how data gets marked
+      never-snapshot/never-backup — carved out now because converting a
+      populated directory later means moving every byte.
+
+      - `@games` → `/home/stef/Games`, **`compress=no`** (game data is already
+        compressed; `zstd:3` would spend write CPU for ~nothing). Operator chose
+        the in-home path over a top-level `/games`.
+      - `@log` → `/var/log`, compression kept (journals are text and compress
+        well), so a root rollback doesn't discard the logs explaining it.
+
+      Two ownership/boot details verified in nixpkgs source rather than assumed:
+
+      1. **Nesting `@games` inside `@home` is safe.** systemd creates missing
+         mount points as root, so `/home/stef` exists before the user does —
+         but `update-users-groups.pl:235-239` runs `chown`/`chmod`
+         *outside* the `if ! -e` guard, so NixOS fixes home ownership on every
+         activation regardless.
+      2. **The `@games` subvolume root is still root-owned**, and NixOS does not
+         fix nested mounts — so `systemd.tmpfiles.rules` carries
+         `d /home/stef/Games 0755 stef users -` or Steam can't write to it.
+      3. **`/var/log` needs no `neededForBoot`** — it's already in
+         `utils.pathsNeededForBoot` (with `/`, `/nix`, `/nix/store`, `/var`,
+         `/var/lib`), and `fsNeededForBoot` checks that list. This also retires
+         the caveat previously noted against `@nix`.
+
+         Confirmed empirically, and it's a trap for a future reader:
+         `fileSystems."/var/log".neededForBoot` evaluates to **`false`**, yet
+         the generated mount options still include `x-initrd.mount`. The
+         *option* is false; the *behaviour* is correct, because
+         `fsNeededForBoot` ORs the option against the path list. Don't "fix"
+         the false-looking option.
+
+- [ ] **Still unconverted: `@nix` and `@docker`.** Deliberately left out — they
+      buy nothing until snapshot tooling exists, and adding structure that does
+      nothing is worse than not having it. Revisit together with the snapshot
+      decision below.
+- [ ] **No snapshot tooling in the repo** — no snapper, no btrbk, only
+      `services.btrfs.autoScrub`. Until that changes, the subvolume splits above
+      are pre-positioning plus the compression win on games; the
+      rollback-protection rationale is unrealised.
 - [ ] **Autostart the remaining resident user-session daemons.** The polkit
       agent is now wired in `configuration.nix`, but nothing starts
       `blueman-applet` or `hyprpaper` — the modules install them without
