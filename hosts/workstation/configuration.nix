@@ -52,6 +52,11 @@
     memoryPercent = 50;
   };
 
+  # Password is set imperatively at install time (`nixos-enter --root /mnt --
+  # passwd stef` before first reboot) and persists in /etc/shadow — nothing in
+  # git. Explicit because first boot is a lockout if that step is skipped.
+  users.mutableUsers = true;
+
   users.users.stef = {
     isNormalUser = true;
     extraGroups = [ "wheel" "networkmanager" "video" "audio" "input" "docker" ];

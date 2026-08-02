@@ -33,6 +33,7 @@ Recorded so they don't get re-litigated:
 | Display manager | **SDDM** — "best supported" per operator; it reads session `.desktop` files and picks up `hyprland-uwsm.desktop` automatically, exactly as on Arch today, instead of needing a hand-written `--cmd` string |
 | Operator/deploy role | **NixOS takes over** managing main + Pi from Arch |
 | Dotfiles | Handled in a separate session |
+| Password | **Imperative, at install** — `users.mutableUsers = true` (now explicit), `passwd stef` via `nixos-enter` before first reboot. Nothing in git; agenix `hashedPasswordFile` deliberately rejected until the keys/agenix work lands, if at all |
 
 ---
 
@@ -265,6 +266,11 @@ Local facts already gathered (2026-07-31):
 
 ### Remaining install-time steps
 
+- [ ] **Set the login password before first reboot:** `nixos-enter --root /mnt
+      -- passwd stef`. ⚠️ Skipping this is a lockout — SDDM is the only entry
+      point and SSH is key-only. `mutableUsers = true`, so the password
+      persists in `/etc/shadow` across rebuilds; a *reinstall* needs this step
+      again.
 - [x] Arch's UKI filenames — confirmed from two readable sources without root:
       `/etc/mkinitcpio.d/*.preset` declares
       `default_uki="/efi/EFI/Linux/arch-linux.efi"` and
@@ -480,9 +486,15 @@ Local facts already gathered (2026-07-31):
       Still to decide: whether the NixOS workstation materialises the real file
       via `environment.etc` like main does, or whether `site` should stop being
       a flake-level input so unrelated hosts don't depend on it.
-- [ ] **Password / lockout.** No `initialHashedPassword`, `mutableUsers`, or
-      `security.sudo` config in any host. With a DM as the only entry point and
-      key-only SSH, first boot is a lockout.
+- [x] **Password / lockout.** Resolved 2026-08-02: `users.mutableUsers = true`
+      made explicit in `configuration.nix`, password set imperatively at
+      install (see the install-time step above). Chosen over an
+      operator-managed hash file (moves the lockout, doesn't remove it) and
+      agenix `hashedPasswordFile` + `neededForUsers` (gated on the keys work;
+      revisit there if a declarative password is ever wanted). Committing a
+      hash to git was rejected outright — offline-crackable and permanent in
+      history. `security.sudo` remains default (wheel + password), which is
+      fine.
 - [ ] **Keys.** `keys/operator.pub` is different key material from
       `~/.ssh/id_ed25519.pub`, and it's both `stef`'s `authorized_keys` and an
       agenix recipient for all four secrets. Since NixOS is taking over the
