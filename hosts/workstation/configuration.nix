@@ -210,6 +210,12 @@ in
     jack.enable = true;
   };
 
+  # environment.systemPackages does not install a package's systemd units, and
+  # NixOS ignores their [Install] section, so both lines are needed. The unit
+  # itself is mako's own — Type=dbus, PartOf=graphical-session.target.
+  systemd.packages = [ pkgs.mako ];
+  systemd.user.services.mako.wantedBy = [ "graphical-session.target" ];
+
   hardware.bluetooth.enable = true;
   services.blueman.enable = true;   # blueberry is gone from nixpkgs, see above
 
