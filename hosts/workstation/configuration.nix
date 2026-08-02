@@ -1,4 +1,4 @@
-{ config, lib, pkgs, operatorPubkeyPath, ... }:
+{ config, lib, pkgs, operatorPubkeyPath, sitePath, ... }:
 
 {
   imports = [
@@ -23,13 +23,19 @@
       enable = true;
       autoGenerateKeys = false;
     };
+    # `protocol: efi`, not `chainload` — Limine 12 has no protocol by that
+    # name and panics with "Unsupported protocol specified." at entry select.
+    # The accepted names in the 12.4.1 binary are linux / limine / multiboot{,1,2}
+    # / efi / efi_chainload / bios_chainload; `chainload` is only an internal
+    # function symbol. nixpkgs' own generator writes `protocol: efi` + `path:`
+    # for its Xen EFI entry (limine-install.py:250), which is the same shape.
     extraEntries = ''
       /Arch Linux
-          protocol: chainload
+          protocol: efi
           path: uuid(b57468df-5404-499b-b84e-5b8ea0108ce6):/EFI/Linux/arch-linux.efi
 
       /Arch Linux (fallback initramfs)
-          protocol: chainload
+          protocol: efi
           path: uuid(b57468df-5404-499b-b84e-5b8ea0108ce6):/EFI/Linux/arch-linux-fallback.efi
     '';
   };
@@ -53,6 +59,19 @@
   # loudly, and under Secure Boot it can't be corrected from the boot menu
   # (signed cmdline, editor disabled) — recovery is an older generation.
   boot.kernelParams = [ "resume_offset=533760" ];
+
+  # Materialize the `site` flake input at its canonical path, same as main
+  # does. This host never reads `siteConfig`, but flake inputs are fetched
+  # eagerly, so `.#workstation` will not evaluate at all without the file
+  # present — verified empirically, see MIGRATION.md. Without this line the
+  # installed system can't rebuild itself.
+  #
+  # Note this does not bootstrap: `environment.etc` can only place the file
+  # if the machine doing the evaluation already has it. A fresh install
+  # needs one manual copy before its first rebuild; from then on this keeps
+  # it in place. Same caveat as main — after editing site.nix and relocking,
+  # the first rebuild must run somewhere the real file already lives.
+  environment.etc."nixos/site.nix".source = sitePath;
 
   networking.hostName = "workstation";
   networking.networkmanager.enable = true;

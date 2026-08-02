@@ -312,6 +312,51 @@ Local facts already gathered (2026-07-31):
 - [ ] Boot-test the `uuid()` chainload path syntax — it's per Limine's
       CONFIG.md, but the nixpkgs example uses the `boot():///…` form and the
       `uuid()` chainload was not exercised in research.
+
+      **First boot test 2026-08-02: the menu came up, the Arch entry failed.**
+      Root cause found without root access, by reading the string pool of the
+      exact installed binary
+      (`/nix/store/xv2p5svch3pkyl62k2nrmdmx8dr4l238-limine-12.4.1/share/limine/BOOTX64.EFI`):
+      **`protocol: chainload` is not a Limine 12 protocol name.** The accepted
+      literals are `linux`, `limine`, `multiboot`/`multiboot1`/`multiboot2`,
+      `efi`, `efi_chainload`, `bios_chainload`; `chainload` appears only in the
+      symbol table (a C function name, neighbouring `uri_open`/`image_open`),
+      not in the literal region. An unmatched name hits the panic string
+      `Unsupported protocol specified.` — also present in the binary.
+      Corroborated by nixpkgs' own generator: `limine-install.py:250` writes
+      `protocol: efi` + `path:` for the Xen EFI entry. Fixed in
+      `configuration.nix`; **still unverified is the `uuid()` URI itself**, so
+      this item stays open until the entry actually chainloads.
+
+      Technique worth reusing: `strings -n 3 -t d` on the EFI binary and sorting
+      hits by offset separates the string-literal region from the symbol-table
+      region, which is what distinguishes a real config keyword from a function
+      name.
+- [x] **Hand-authoring `hardware-configuration.nix` silently dropped
+      `hardware.enableRedistributableFirmware`.** Found 2026-08-02 on first
+      boot, fixed in that file.
+
+      A generated `hardware-configuration.nix` imports
+      `(modulesPath + "/installer/scan/not-detected.nix")`, and that file's
+      *entire* content is `hardware.enableRedistributableFirmware =
+      lib.mkDefault true;`. Writing the stub by hand dropped the import, and
+      nothing put it back — `nixos-hardware.nixosModules.framework-16-7040-amd`
+      does **not** set it (verified by eval: `false` with that module imported).
+      So the installed system shipped with no `linux-firmware` at all.
+
+      One missing option, three symptoms, all confirmed against the real
+      hardware by reading `lspci` + Arch's own `journalctl -k`:
+
+      | Broke | Device | Needs from `linux-firmware` |
+      |---|---|---|
+      | Display | AMD Phoenix1 iGPU `1002:15bf` | DMUB / VCN / PSP blobs — without them `amdgpu` can't init, so it's simpledrm + llvmpipe: garbled SDDM glyphs, no cursor, apparent freeze, unusable VT switching |
+      | WiFi | MediaTek MT7922 `14c3:0616` (`mt7921e`) | `mediatek/WIFI_RAM_CODE_MT7922_*.bin` |
+      | Microcode | Ryzen 7040 | `hardware.cpu.amd.updateMicrocode` is `mkDefault`-ed *from this same option*, so it was off too |
+
+      Lesson for the other two hosts: **a hand-authored hardware stub is not
+      just "generated minus the noise"** — `not-detected.nix` carries real
+      behaviour, and it is the easiest thing in that file to lose. Worth
+      checking main and the Pi for the same omission.
 - [ ] Do one real hibernate/resume test. `zramSwap` is on at 50%; NixOS excludes
       `/dev/zram*` from resume devices and `resume=` is explicit, so the image
       should go to the disk swapfile — but that's inferred, not verified.
