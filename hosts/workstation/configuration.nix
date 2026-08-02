@@ -1,5 +1,40 @@
 { config, lib, pkgs, operatorPubkeyPath, sitePath, ... }:
 
+let
+  # Bridge for the Stow-managed dotfiles, which stay the source of truth for
+  # everything under ~ (see hosts/workstation/DOTFILES.md). They are written
+  # for Arch, and the one thing that genuinely cannot work unchanged is
+  # ~/.config/zsh/.zshrc sourcing plugins from /usr/share/zsh/plugins/<name>/.
+  #
+  # nixpkgs does not agree on a layout — only zsh-autosuggestions happens to
+  # match Arch's, under a different prefix:
+  #
+  #   zsh-autosuggestions     share/zsh/plugins/zsh-autosuggestions/…zsh
+  #   zsh-syntax-highlighting share/zsh-syntax-highlighting/…zsh
+  #   zsh-fzf-tab             share/fzf-tab/fzf-tab.plugin.zsh
+  #
+  # So re-expose all three in Arch's shape and hand the path to .zshrc via
+  # ZSH_PLUGIN_DIR. The dotfiles then read
+  # ${ZSH_PLUGIN_DIR:-/usr/share/zsh/plugins}, which keeps the *same* file
+  # working unmodified on Arch, where the variable is simply unset. Symlinks,
+  # not copies: the plugins source sibling files by relative path.
+  zshPluginDir = pkgs.runCommand "zsh-plugins-archlayout" { } ''
+    mkdir -p $out/fzf-tab $out/zsh-autosuggestions $out/zsh-syntax-highlighting
+    ln -s ${pkgs.zsh-fzf-tab}/share/fzf-tab/* $out/fzf-tab/
+    ln -s ${pkgs.zsh-autosuggestions}/share/zsh/plugins/zsh-autosuggestions/* $out/zsh-autosuggestions/
+    ln -s ${pkgs.zsh-syntax-highlighting}/share/zsh-syntax-highlighting/* $out/zsh-syntax-highlighting/
+  '';
+
+  # libwayland-cursor resolves a theme name against XCURSOR_PATH and falls back
+  # to one named literally "default" when XCURSOR_THEME is unset. The dotfiles'
+  # hypr/modules/env.lua sets XCURSOR_SIZE and HYPRCURSOR_SIZE but no theme
+  # name, so without this Hyprland has no pointer to draw.
+  defaultCursorTheme = pkgs.runCommand "default-cursor-theme" { } ''
+    mkdir -p $out/share/icons/default
+    printf '[Icon Theme]\nName=default\nComment=Redirect to Adwaita\nInherits=Adwaita\n' \
+      > $out/share/icons/default/index.theme
+  '';
+in
 {
   imports = [
     ./hardware-configuration.nix
@@ -206,8 +241,21 @@
     jack.enable = true;
   };
 
+  # environment.systemPackages does not install a package's systemd units, and
+  # NixOS ignores their [Install] section, so both lines are needed. The unit
+  # itself is mako's own — Type=dbus, PartOf=graphical-session.target.
+  systemd.packages = [ pkgs.mako ];
+  systemd.user.services.mako.wantedBy = [ "graphical-session.target" ];
+
   hardware.bluetooth.enable = true;
-  services.blueman.enable = true;
+  services.blueman.enable = true;   # blueberry is gone from nixpkgs, see above
+
+  # Read by the Stow-managed ~/.config/zsh/.zshrc, which sources
+  # ${ZSH_PLUGIN_DIR:-/usr/share/zsh/plugins}/… — see zshPluginDir above for
+  # why the indirection exists and why Arch keeps working without it.
+  # environment.variables lands in /etc/set-environment, sourced by login
+  # shells, which is exactly the scope a shell rc needs.
+  environment.variables.ZSH_PLUGIN_DIR = "${zshPluginDir}";
 
   # RADV (Vulkan) ships inside mesa on NixOS — unlike Arch there is no
   # separate vulkan-radeon package to add here.
@@ -300,7 +348,7 @@
     alacritty
     waybar
     wofi
-    dunst
+    mako
     hyprpaper
     hypridle           # no NixOS module for this one, unlike hyprlock
     brightnessctl
@@ -315,24 +363,8 @@
     networkmanagerapplet
     polkit_gnome
     qt6.qtwayland
-    # XCURSOR theme. Without one on disk no Wayland client has a pointer to
-    # draw — this is the missing mouse in the greeter, and it would hit
-    # Hyprland too. Verified adwaita-icon-theme 50.0 still ships
-    # share/icons/Adwaita/cursors (GNOME has relocated these before).
     adwaita-icon-theme
-
-    # Installing Adwaita alone is not enough, which is why the first attempt at
-    # this failed. libwayland-cursor takes the theme name from XCURSOR_THEME
-    # and, when that is unset, looks for a theme named literally "default".
-    # SDDM never exports XCURSOR_THEME, so the greeter asks for "default",
-    # finds no such directory, and silently draws nothing. Ship a "default"
-    # that redirects to Adwaita rather than plumbing an env var through
-    # sddm-helper, which curates the greeter's environment.
-    (runCommand "default-cursor-theme" { } ''
-      mkdir -p $out/share/icons/default
-      printf '[Icon Theme]\nName=default\nComment=Redirect to Adwaita\nInherits=Adwaita\n' \
-        > $out/share/icons/default/index.theme
-    '')
+    defaultCursorTheme
 
     # Shell + CLI
     stow

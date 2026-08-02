@@ -28,7 +28,7 @@ Recorded so they don't get re-litigated:
 | Hibernate | **Yes** — btrfs swapfile on a `@swap` subvolume; `resume_offset` read post-install |
 | Boot menu | **One unified menu, no firmware menu** — Limine on the NixOS ESP, chainloading Arch |
 | Secure Boot | **Limine `secureBoot`, reusing Arch's existing sbctl keys** — never re-enrol |
-| Notification daemon | **Keep `dunst`** (not mako) |
+| Notification daemon | **mako** (2026-08-02, reversing an earlier `dunst`) — Wayland-native, modes for DND, `makoctl menu` uses wofi. Costs: no `history-pop [ID]`, no `dunstify`. |
 | Login shell | zsh |
 | Display manager | **SDDM** — "best supported" per operator; it reads session `.desktop` files and picks up `hyprland-uwsm.desktop` automatically, exactly as on Arch today, instead of needing a hand-written `--cmd` string |
 | Operator/deploy role | **NixOS takes over** managing main + Pi from Arch |
@@ -678,3 +678,8 @@ cppcheck, and the font additions (`noto-fonts-cjk`, `font-awesome`, `inter`).
 
 Also noted: **dunst is being kept, but the dotfiles configure mako** — dunst
 will start with no config until the dotfiles session addresses it.
+
+**Resolved 2026-08-02: mako.** Only one of the two may be installed — both claim
+`org.freedesktop.Notifications` and D-Bus activate on the first notification,
+which is why nothing execs a notification daemon and why the mismatch would
+never have raised an error.
