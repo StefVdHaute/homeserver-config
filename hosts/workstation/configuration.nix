@@ -311,16 +311,9 @@ in
     alacritty
     waybar
     wofi
-    # mako, not dunst. Chosen on the tools' merits, not just because the
-    # dotfiles already style mako: Wayland-native (wlr-layer-shell) on a
-    # Wayland-only host, named composable modes are a better DND primitive
-    # than dunst's single pause axis, and `makoctl menu` hands action-picking
-    # to wofi, which this desktop already runs. Known trade-off: mako's
-    # `restore` pops only the most recent notification and there is no
-    # dunstify. Reverses an earlier "keep dunst" entry — see MIGRATION.md.
-    #
-    # Note only one of these may be installed: both claim the D-Bus name
-    # org.freedesktop.Notifications and so activate on first notification.
+    # Only one notification daemon may be installed: mako and dunst both claim
+    # org.freedesktop.Notifications and D-Bus activate on first use. Choice
+    # rationale in MIGRATION.md.
     mako
     hyprpaper
     hypridle           # no NixOS module for this one, unlike hyprlock
