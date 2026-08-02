@@ -242,10 +242,15 @@ in
   };
 
   # environment.systemPackages does not install a package's systemd units, and
-  # NixOS ignores their [Install] section, so both lines are needed. The unit
-  # itself is mako's own — Type=dbus, PartOf=graphical-session.target.
-  systemd.packages = [ pkgs.mako ];
+  # NixOS ignores their [Install] section, so both halves are needed. The units
+  # are the packages' own; each is already PartOf/After graphical-session.target.
+  # Nothing execs these from the hypr config — the desktop expects user units,
+  # which is what uwsm is for.
+  systemd.packages = with pkgs; [ mako waybar hypridle hyprpaper ];
   systemd.user.services.mako.wantedBy = [ "graphical-session.target" ];
+  systemd.user.services.waybar.wantedBy = [ "graphical-session.target" ];
+  systemd.user.services.hypridle.wantedBy = [ "graphical-session.target" ];
+  systemd.user.services.hyprpaper.wantedBy = [ "graphical-session.target" ];
 
   hardware.bluetooth.enable = true;
   services.blueman.enable = true;   # blueberry is gone from nixpkgs, see above
