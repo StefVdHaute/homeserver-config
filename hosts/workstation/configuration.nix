@@ -311,9 +311,16 @@ in
     alacritty
     waybar
     wofi
-    # mako, not dunst: the dotfiles ship mako/.config/mako styled to match
-    # waybar, and no dunst config at all. dunst here was inert — the notif
-    # daemon the desktop is actually configured for is this one.
+    # mako, not dunst. Chosen on the tools' merits, not just because the
+    # dotfiles already style mako: Wayland-native (wlr-layer-shell) on a
+    # Wayland-only host, named composable modes are a better DND primitive
+    # than dunst's single pause axis, and `makoctl menu` hands action-picking
+    # to wofi, which this desktop already runs. Known trade-off: mako's
+    # `restore` pops only the most recent notification and there is no
+    # dunstify. Reverses an earlier "keep dunst" entry — see MIGRATION.md.
+    #
+    # Note only one of these may be installed: both claim the D-Bus name
+    # org.freedesktop.Notifications and so activate on first notification.
     mako
     hyprpaper
     hypridle           # no NixOS module for this one, unlike hyprlock
