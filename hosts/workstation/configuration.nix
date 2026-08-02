@@ -311,9 +311,6 @@ in
     alacritty
     waybar
     wofi
-    # Only one notification daemon may be installed: mako and dunst both claim
-    # org.freedesktop.Notifications and D-Bus activate on first use. Choice
-    # rationale in MIGRATION.md.
     mako
     hyprpaper
     hypridle           # no NixOS module for this one, unlike hyprlock
