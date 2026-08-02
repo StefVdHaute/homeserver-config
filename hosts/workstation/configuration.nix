@@ -145,6 +145,26 @@
     sddm = {
       enable = true;
       wayland.enable = true;
+
+      # Setting *a* theme is load-bearing, not cosmetic. With none set SDDM
+      # falls back to its embedded theme, whose ComboBox binds `arrowIcon:
+      # "angle-down.png"` — and that asset does not ship next to
+      # `SddmComponents/ComboBox.qml`. The greeter logs `QML Image: Cannot
+      # open: .../SddmComponents/angle-down.png` and the keyboard-layout
+      # selector renders as a broken icon. maldives is bundled inside the sddm
+      # package (no extra closure) and carries its own copy; QML resolves the
+      # relative URL against the file declaring the binding, so it picks up
+      # maldives/angle-down.png. elarun works for the same reason; maya has no
+      # copy, so don't switch to it without checking.
+      theme = "maldives";
+
+      # Under Wayland the client draws its own pointer from an XCURSOR theme.
+      # Nothing here pulled one in, so `share/icons/*/cursors` did not exist
+      # anywhere in the system path and the greeter had no cursor to draw —
+      # that is the missing mouse, not a GPU fault. Package added to
+      # systemPackages below; verified adwaita-icon-theme 50.0 still ships
+      # share/icons/Adwaita/cursors (GNOME has moved these around before).
+      settings.Theme.CursorTheme = "Adwaita";
     };
     defaultSession = "hyprland-uwsm";
   };
@@ -284,6 +304,10 @@
     networkmanagerapplet
     polkit_gnome
     qt6.qtwayland
+    # XCURSOR theme. Needed by SDDM (see settings.Theme.CursorTheme above) and
+    # by Hyprland itself — without a cursor theme on disk neither has a pointer
+    # to draw. Not optional on a Wayland-only host.
+    adwaita-icon-theme
 
     # Shell + CLI
     stow
