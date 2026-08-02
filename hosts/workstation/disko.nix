@@ -59,7 +59,19 @@
             size = "100%";
             content = {
               type = "luks";
-              name = "cryptroot";
+              # NOT "cryptroot". This one string lands in two namespaces
+              # with different scopes: disko emits it both as the runtime
+              # `cryptsetup open <dev> <name>` argument and as the
+              # boot.initrd.luks.devices.<name> entry. The initrd side only
+              # has to be unique within this install; the script side has to
+              # be unique among the device-mapper names *live on whatever
+              # machine runs it* — here, booted Arch, whose own root mapper
+              # is called `cryptroot` (the mkinitcpio convention, which is
+              # why both sides reach for the same name). `cryptsetup open`
+              # refuses a name already in use, and the script runs under
+              # `set -efux`, so the collision aborts the install partway
+              # instead of corrupting anything. Prefix keeps the two apart.
+              name = "nixos-cryptroot";
               extraFormatArgs = [ "--type" "luks2" ];
               content = {
                 type = "btrfs";
@@ -82,22 +94,40 @@
                     mountpoint = "/var/log";
                     mountOptions = [ "compress=zstd:3" "noatime" ];
                   };
-                  # Steam library. compress=no on purpose: game data is
-                  # already compressed, so zstd:3 spends write CPU for
-                  # ~nothing. Being its own subvolume also keeps it out of
-                  # any future @home snapshot — btrfs snapshots don't
-                  # recurse into nested subvolumes. Carved out now because
+                  # Steam library. Its own subvolume so it stays out of any
+                  # future @home snapshot — btrfs snapshots don't recurse
+                  # into nested subvolumes. Carved out now because
                   # converting a full library directory later means moving
                   # every byte.
+                  #
+                  # This carried compress=no until 2026-08-02. Removed for
+                  # two reasons. It never worked: compress is applied per
+                  # superblock, and "only options in the first mounted
+                  # subvolume will take effect... you can't set
+                  # per-subvolume nodatacow, nodatasum, or compress using
+                  # mount options" (btrfs docs) — @nixos mounts first, so
+                  # this was inert, and had @games ever mounted first it
+                  # would have disabled compression filesystem-wide. And it
+                  # wasn't needed: without compress-force btrfs samples
+                  # each file and "if the first portion of data being
+                  # compressed is not smaller than the original, the
+                  # compression of the whole file is disabled" — game
+                  # assets are already compressed, so zstd:3 backs off on
+                  # its own. Don't reintroduce it, and don't reach for the
+                  # btrfs compression property either; it buys one skipped
+                  # entropy sample per file.
                   "@games" = {
                     mountpoint = "/home/stef/Games";
-                    mountOptions = [ "compress=no" "noatime" ];
+                    mountOptions = [ "compress=zstd:3" "noatime" ];
                   };
-                  # No compression here — btrfs requires swapfiles be
-                  # NODATACOW and uncompressed.
+                  # Swapfiles must be NODATACOW and uncompressed, but that
+                  # can't be expressed here either (same per-superblock
+                  # limitation). It doesn't need to be: `btrfs filesystem
+                  # mkswapfile`, which disko uses, sets both on the file
+                  # itself, and btrfs refuses to swapon a file that isn't.
                   "@swap" = {
                     mountpoint = "/swap";
-                    mountOptions = [ "noatime" ];
+                    mountOptions = [ "compress=zstd:3" "noatime" ];
                     swap.swapfile.size = "40G";
                   };
                 };

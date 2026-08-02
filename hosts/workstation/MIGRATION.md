@@ -216,7 +216,12 @@ never re-enrolled.**
 
 ✅ **Implemented and eval-verified 2026-07-31.** `limine.enable = true`,
 `secureBoot.enable = true`, `systemd-boot.enable = false`,
-`resumeDevice = /dev/mapper/cryptroot`, and disko generated
+`resumeDevice = /dev/mapper/nixos-cryptroot` — renamed from `cryptroot`
+2026-08-02 because that is also Arch's mapper name, and disko's luks `name`
+is used both as the `cryptsetup open` argument at install time and as the
+`boot.initrd.luks.devices` key, so the original collided with the running
+system and aborted the install. `configuration.nix` reads the name back out
+of the disko option rather than repeating it. And disko generated
 `swapDevices = [ "/swap/swapfile" ]` on its own — so `swap.swapfile.size` is the
 right schema and no separate swap declaration is needed. ESP grown 1 G → 2 G for
 Limine's per-generation kernel/initrd copies. Swapfile **40 G** (32 G RAM +
@@ -266,22 +271,44 @@ Local facts already gathered (2026-07-31):
 
 ### Remaining install-time steps
 
-- [ ] **Set the login password before first reboot:** `nixos-enter --root /mnt
-      -- passwd stef`. ⚠️ Skipping this is a lockout — SDDM is the only entry
-      point and SSH is key-only. `mutableUsers = true`, so the password
-      persists in `/etc/shadow` across rebuilds; a *reinstall* needs this step
-      again.
+- [x] **Set the login password before first reboot.** ⚠️ Skipping this is a
+      lockout — SDDM is the only entry point and SSH is key-only.
+      `mutableUsers = true`, so the password persists in `/etc/shadow` across
+      rebuilds; a *reinstall* needs this step again. Done 2026-08-02 for both
+      `stef` and `root` (`passwd -S` reports `P` for each).
+
+      The invocation in the obvious form does **not** work:
+      `nixos-enter --root /mnt -- passwd stef` fails with
+      `chroot: failed to run command 'passwd'`, and `-c 'passwd stef'` fails
+      with `command not found`. `--` execs straight through `chroot`, and
+      `-c` runs the target's bash but *both* inherit the host's `PATH`, which
+      is all Arch paths that don't exist inside the chroot. Use an absolute
+      path: `nixos-enter --root /mnt -c
+      '/nix/var/nix/profiles/system/sw/bin/passwd stef'`. Not
+      `/run/current-system/...` — `nixos-enter` mounts a tmpfs on the
+      target's `/run`.
 - [x] Arch's UKI filenames — confirmed from two readable sources without root:
       `/etc/mkinitcpio.d/*.preset` declares
       `default_uki="/efi/EFI/Linux/arch-linux.efi"` and
       `fallback_uki=".../arch-linux-fallback.efi"`, and `/var/lib/sbctl/files.json`
       lists exactly those two as the signed files. Both are wired into
       `extraEntries` already.
-- [ ] Copy `/var/lib/sbctl` to the same path on NixOS, root-owned, mode 0700.
-- [ ] Get `resume_offset` once: `btrfs inspect-internal map-swapfile -r
+- [x] Copy `/var/lib/sbctl` to the same path on NixOS, root-owned, mode 0700.
+      Done 2026-08-02. **Ordering matters and this list had it wrong:** it must
+      happen *before* `nixos-install`, not after. `limine-install.py:433` does
+      `if secureBoot.enable and not autoGenerateKeys and not
+      os.path.exists("/var/lib/sbctl"): sys.exit(1)`, and the bootloader
+      installer runs chrooted into `/mnt`, so the path it checks is
+      `/mnt/var/lib/sbctl`. Copying afterwards means the install dies at its
+      last step. Confirmed working: `✓ Signed /boot/efi/limine/BOOTX64.EFI`.
+- [x] Get `resume_offset` once: `btrfs inspect-internal map-swapfile -r
       /swap/swapfile` (**not** `filefrag`, which is wrong for btrfs), then
       hard-code it into `boot.kernelParams`. disko does not emit it —
       disko#651 is open. Recreating the swapfile changes the offset.
+      Measured 2026-08-02: **533760**, pinned in `configuration.nix`. Read it
+      before `nixos-install` rather than after first boot — the swapfile
+      exists as soon as disko has run, so the value can be baked into the
+      closure you install instead of costing a rebuild.
 - [ ] Boot-test the `uuid()` chainload path syntax — it's per Limine's
       CONFIG.md, but the nixpkgs example uses the `boot():///…` form and the
       `uuid()` chainload was not exercised in research.
@@ -500,6 +527,16 @@ Local facts already gathered (2026-07-31):
       agenix recipient for all four secrets. Since NixOS is taking over the
       operator role, the private key has to land there and the agenix
       recipients need revisiting.
+
+      Private key copied onto the NixOS side 2026-08-02 (operator-managed
+      path, deliberately not recorded here). **Still blocking agenix:**
+      `/etc/nixos/main-host-key.pub` doesn't exist on this machine, and
+      `secrets/secrets.nix:22` reads it to build the recipient list — so
+      every `agenix` operation fails to evaluate, including `-d`. Raw
+      `age -d -i <key> secrets/<name>.age` works regardless, and was used to
+      verify the operator key really is a recipient. Fetch the pubkey from
+      main to unblock: `ssh operator@homeserver 'cat
+      /etc/ssh/ssh_host_ed25519_key.pub'`.
 - [x] **Address the new drive by `/dev/disk/by-id/`.** ✅ Done 2026-08-01 —
       and it turned out to be not merely prudent but **necessary**.
 

@@ -34,11 +34,25 @@
     '';
   };
 
-  # Hibernate target is the btrfs swapfile declared in disko.nix. resume_offset
-  # is deliberately absent — it can only be read off the real filesystem
-  # (`btrfs inspect-internal map-swapfile -r /swap/swapfile`) and disko cannot
-  # emit it. Without it resume silently no-ops rather than misbehaving.
-  boot.resumeDevice = "/dev/mapper/cryptroot";
+  # Hibernate target is the btrfs swapfile declared in disko.nix.
+  #
+  # Read the mapper name back out of disko rather than repeating it: a
+  # hardcoded copy that drifts from disko.nix's luks `name` still boots and
+  # still evaluates, and only shows up as hibernate silently not resuming.
+  # Via the option, a rename over there either follows here or fails loudly
+  # at eval.
+  boot.resumeDevice =
+    "/dev/mapper/${config.disko.devices.disk.nixos.content.partitions.luks.content.name}";
+
+  # resume_offset can only be read off the real filesystem and disko cannot
+  # emit it (disko#651), so it is measured once and pinned here. Taken
+  # 2026-08-02 from the installed swapfile with `btrfs inspect-internal
+  # map-swapfile -r /mnt/swap/swapfile` — note map-swapfile, NOT filefrag,
+  # which reports the wrong value on btrfs. Recreating the swapfile changes
+  # the offset; a stale value makes resume silently no-op rather than fail
+  # loudly, and under Secure Boot it can't be corrected from the boot menu
+  # (signed cmdline, editor disabled) — recovery is an older generation.
+  boot.kernelParams = [ "resume_offset=533760" ];
 
   networking.hostName = "workstation";
   networking.networkmanager.enable = true;
