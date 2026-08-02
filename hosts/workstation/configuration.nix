@@ -209,10 +209,21 @@
     };
   };
 
+  # No authKeyFile here, deliberately — authenticate once with `sudo tailscale
+  # up`. /etc/tailscale/authkey is the *Pi's* mechanism (it has no operator at
+  # the console on first boot); CLAUDE.md scopes it "Pi only" and this host
+  # copied the pattern without ever creating the file.
+  #
+  # The cost was not a missing tailnet, it was a broken desktop.
+  # tailscaled-autoconnect is WantedBy=multi-user.target, and with the file
+  # absent it blocks for its full 90s timeout instead of failing fast. That
+  # holds up multi-user.target and so graphical.target. uwsm waits only 60s for
+  # graphical.target before giving up and tearing the session down, so login
+  # lost the race by ~10s every time and bounced back to SDDM. A laptop also
+  # shouldn't carry a long-lived auth key, and keys expire in 90 days anyway.
   services.tailscale = {
     enable = true;
     useRoutingFeatures = "client";
-    authKeyFile = "/etc/tailscale/authkey";
   };
 
   networking.firewall = {

@@ -357,6 +357,36 @@ Local facts already gathered (2026-07-31):
       just "generated minus the noise"** — `not-detected.nix` carries real
       behaviour, and it is the easiest thing in that file to lose. Worth
       checking main and the Pi for the same omission.
+- [x] **A missing Tailscale auth key was breaking the *desktop*, not the
+      tailnet.** Found 2026-08-02 in the journal; `authKeyFile` dropped from
+      this host.
+
+      `services.tailscale.authKeyFile = "/etc/tailscale/authkey"` was copied
+      from the Pi, but that file only ever existed on the Pi — CLAUDE.md scopes
+      it "Pi only". With it absent, `tailscaled-autoconnect` does not fail
+      fast; it blocks for its full 90 s timeout. It is
+      `WantedBy=multi-user.target`, so `multi-user.target` and therefore
+      `graphical.target` are held up for that whole 90 s. `uwsm start` waits
+      **60 s** for `graphical.target` and then tears the session down.
+
+      The margin was ten seconds, and the journal shows it exactly:
+
+      ```
+      19:07:39  Starting tailscaled-autoconnect.service...
+                cat: /etc/tailscale/authkey: No such file or directory
+      19:08:01  sddm: Authentication for user "stef" successful
+                uwsm: graphical.target is queued for start, waiting for 60s...
+      19:09:00  uwsm countdown ends, session torn down → back to greeter
+      19:09:10  systemd: Reached target Graphical Interface
+      ```
+
+      Two things worth carrying forward. **This was invisible from the
+      symptom** — it presents as "Hyprland/SDDM is broken", and every
+      config-level check of the display stack comes back clean, because the
+      display stack *is* clean. Only the journal shows a Tailscale unit as the
+      cause. And **it hid behind the firmware bug**: both had to be fixed
+      before either could be seen, since pre-firmware the greeter was too
+      broken to log in through at all.
 - [ ] Do one real hibernate/resume test. `zramSwap` is on at 50%; NixOS excludes
       `/dev/zram*` from resume devices and `resume=` is explicit, so the image
       should go to the disk swapfile — but that's inferred, not verified.
