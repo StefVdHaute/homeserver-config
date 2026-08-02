@@ -158,15 +158,26 @@
       # copy, so don't switch to it without checking.
       theme = "maldives";
 
-      # Under Wayland the client draws its own pointer from an XCURSOR theme.
-      # Nothing here pulled one in, so `share/icons/*/cursors` did not exist
-      # anywhere in the system path and the greeter had no cursor to draw —
-      # that is the missing mouse, not a GPU fault. Package added to
-      # systemPackages below; verified adwaita-icon-theme 50.0 still ships
-      # share/icons/Adwaita/cursors (GNOME has moved these around before).
-      settings.Theme.CursorTheme = "Adwaita";
+      # NOTE: `settings.Theme.CursorTheme` deliberately absent — it does
+      # nothing here. That key drives SDDM's X11 path only (the daemon's
+      # XcursorLibraryLoadCursor / "Setting default cursor" code); the string
+      # XCURSOR_THEME does not appear anywhere in the sddm package, so under
+      # Wayland it never reaches the greeter. See the cursor theme in
+      # systemPackages below for what actually fixes the missing pointer.
     };
     defaultSession = "hyprland-uwsm";
+  };
+
+  # The cursor theme in systemPackages is necessary but not sufficient: it
+  # lands in /run/current-system/sw/share/icons, and nothing points the greeter
+  # there. libwayland-cursor searches XCURSOR_PATH, falling back to a compiled
+  # -in list (~/.icons:/usr/share/icons:...) of which *no* entry exists on
+  # NixOS, and display-manager.service sets neither that nor XCURSOR_THEME
+  # (checked in the generated unit — it carries only LOCALE_ARCHIVE, PATH,
+  # TZDIR). Both are needed for the greeter to resolve a pointer.
+  systemd.services.display-manager.environment = {
+    XCURSOR_PATH = "/run/current-system/sw/share/icons";
+    XCURSOR_THEME = "Adwaita";
   };
 
   # polkit_gnome ships only an XDG autostart entry marked
@@ -304,10 +315,24 @@
     networkmanagerapplet
     polkit_gnome
     qt6.qtwayland
-    # XCURSOR theme. Needed by SDDM (see settings.Theme.CursorTheme above) and
-    # by Hyprland itself — without a cursor theme on disk neither has a pointer
-    # to draw. Not optional on a Wayland-only host.
+    # XCURSOR theme. Without one on disk no Wayland client has a pointer to
+    # draw — this is the missing mouse in the greeter, and it would hit
+    # Hyprland too. Verified adwaita-icon-theme 50.0 still ships
+    # share/icons/Adwaita/cursors (GNOME has relocated these before).
     adwaita-icon-theme
+
+    # Installing Adwaita alone is not enough, which is why the first attempt at
+    # this failed. libwayland-cursor takes the theme name from XCURSOR_THEME
+    # and, when that is unset, looks for a theme named literally "default".
+    # SDDM never exports XCURSOR_THEME, so the greeter asks for "default",
+    # finds no such directory, and silently draws nothing. Ship a "default"
+    # that redirects to Adwaita rather than plumbing an env var through
+    # sddm-helper, which curates the greeter's environment.
+    (runCommand "default-cursor-theme" { } ''
+      mkdir -p $out/share/icons/default
+      printf '[Icon Theme]\nName=default\nComment=Redirect to Adwaita\nInherits=Adwaita\n' \
+        > $out/share/icons/default/index.theme
+    '')
 
     # Shell + CLI
     stow
