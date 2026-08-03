@@ -285,8 +285,8 @@ in
     };
   };
 
-  # No authKeyFile here, deliberately — authenticate once with `sudo tailscale
-  # up`. /etc/tailscale/authkey is the *Pi's* mechanism (it has no operator at
+  # No authKeyFile here, deliberately — authenticate once with `tailscale up`.
+  # /etc/tailscale/authkey is the *Pi's* mechanism (it has no operator at
   # the console on first boot); CLAUDE.md scopes it "Pi only" and this host
   # copied the pattern without ever creating the file.
   #
@@ -300,6 +300,8 @@ in
   services.tailscale = {
     enable = true;
     useRoutingFeatures = "client";
+    # Delegates control to stef so `tailscale up`/`status` need no sudo.
+    extraSetFlags = [ "--operator=stef" ];
   };
 
   networking.firewall = {
@@ -370,6 +372,7 @@ in
     defaultCursorTheme       # …plus the "default" name Wayland clients ask for
 
     # Shell + CLI
+    bash
     stow
     file
     unzip
