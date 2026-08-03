@@ -163,8 +163,31 @@ in
   programs.steam = {
     enable = true;
     extraCompatPackages = [ pkgs.proton-ge-bin ];
+
+    # Preloads libextest.so to translate X11 input events to libei. This is
+    # the Wayland controller fix — without it Steam Input misreads or ignores
+    # gamepads under Hyprland. Cheap and only affects Steam's own process.
+    extest.enable = true;
+
+    # winetricks against a Proton prefix — the standard way to fix a single
+    # misbehaving game (missing runtime, DLL override) without touching the
+    # others.
+    protontricks.enable = true;
+
+    # Offers a gamescope-wrapped Big Picture session at SDDM, alongside the
+    # Hyprland ones. Uses programs.gamescope below.
+    gamescopeSession.enable = true;
   };
+
+  # capSysNice deliberately left at its default of false: granting it is a
+  # known cause of gamescope failing to launch at all, and it's far easier to
+  # turn on later than to debug during a fresh install.
   programs.gamescope.enable = true;
+
+  # Feral GameMode. Games opt in (Steam launch option `gamemoderun %command%`),
+  # and while one is running it switches the CPU governor to performance and
+  # raises I/O priority, reverting on exit. Nothing happens until a game asks.
+  programs.gamemode.enable = true;
 
   xdg.portal = {
     enable = true;
