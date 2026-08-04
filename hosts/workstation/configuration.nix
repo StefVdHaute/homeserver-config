@@ -252,6 +252,21 @@ in
   systemd.user.services.hypridle.wantedBy = [ "graphical-session.target" ];
   systemd.user.services.hyprpaper.wantedBy = [ "graphical-session.target" ];
 
+  # As a systemd user unit, waybar inherits only the manager's minimal PATH and
+  # no TERMINAL, so its on-click launchers (blueman, the system monitor,
+  # pavucontrol, wifi-menu, calendar) resolve nothing and silently no-op. Give
+  # it the session's stable PATH entries + TERMINAL. (An exec-once child on Arch
+  # inherits these from Hyprland; a systemd unit does not.)
+  systemd.user.services.waybar.environment = {
+    TERMINAL = "alacritty";
+    PATH = lib.mkForce (lib.concatStringsSep ":" [
+      "/home/stef/.local/bin"
+      "/etc/profiles/per-user/stef/bin"
+      "/run/wrappers/bin"
+      "/run/current-system/sw/bin"
+    ]);
+  };
+
   hardware.bluetooth.enable = true;
   services.blueman.enable = true;   # blueberry is gone from nixpkgs, see above
 
@@ -410,6 +425,7 @@ in
     sbctl              # inspect/verify the Secure Boot chain: sbctl status|verify
     piper
     nvtopPackages.amd
+    pciutils           # lspci: friendly GPU names in waybar's custom/gpu tooltip
     gparted
     qdirstat
     xarchiver
