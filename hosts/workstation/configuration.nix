@@ -419,6 +419,7 @@ in
     gimp
     blender
     mpv
+    qbittorrent
   ];
 
   programs.gnupg.agent = {
