@@ -288,6 +288,14 @@ in
   services.fprintd.enable = true;
   services.ratbagd.enable = true;   # piper is its GUI
 
+  # Let wheel toggle the Framework battery charge ceiling from waybar without
+  # root by making the EC threshold node group-writable. The EC persists the
+  # value across reboots, so no re-apply service is needed. Paired with the
+  # battery-charge-limit script + waybar custom/battery-limit module (dotfiles).
+  services.udev.extraRules = ''
+    SUBSYSTEM=="power_supply", KERNEL=="BAT1", ATTR{charge_control_end_threshold}!="", RUN+="${pkgs.coreutils}/bin/chgrp wheel /sys/class/power_supply/BAT1/charge_control_end_threshold", RUN+="${pkgs.coreutils}/bin/chmod g+w /sys/class/power_supply/BAT1/charge_control_end_threshold"
+  '';
+
   services.printing = {
     enable = true;
     cups-pdf.enable = true;
