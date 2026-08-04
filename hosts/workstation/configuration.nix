@@ -51,6 +51,9 @@ in
   # autoGenerateKeys must stay false: minting a new PK/KEK/db would replace the
   # enrolled db and Arch would stop booting. See MIGRATION.md.
   boot.loader.efi.canTouchEfiVariables = true;
+  # Limine's menu countdown was costing ~7s per boot. 3s is still enough to
+  # catch the menu and pick the Arch entry on the days that's wanted.
+  boot.loader.timeout = 3;
   boot.loader.limine = {
     enable = true;
     maxGenerations = 10;
