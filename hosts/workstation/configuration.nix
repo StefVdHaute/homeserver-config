@@ -138,6 +138,11 @@ in
   # directory's owner and mode, and tmpfiles runs after local-fs.target.
   systemd.tmpfiles.rules = [ "d /home/stef/Games 0755 stef users -" ];
 
+  # Populate /bin and /usr/bin from PATH via a FUSE overlay, so scripts with
+  # non-Nix shebangs resolve instead of dying on a bad interpreter. NixOS
+  # otherwise ships only /bin/sh and /usr/bin/env.
+  services.envfs.enable = true;
+
   # uwsm starts Hyprland as a proper systemd user session, which is what
   # exports WAYLAND_DISPLAY / HYPRLAND_INSTANCE_SIGNATURE into the systemd
   # user environment — the waybar / hypridle / hyprpaper / hyprpolkitagent
@@ -373,6 +378,7 @@ in
 
     # Shell + CLI
     bash
+    python3           # interpreter for Claude Code plugin hooks (hookify)
     stow
     file
     unzip
