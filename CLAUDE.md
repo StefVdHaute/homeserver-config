@@ -35,7 +35,7 @@ This file is the single source of truth for architecture, decisions, and the beh
 
 ## Base OS: NixOS 26.05 (main + backup); nixos-unstable (workstation)
 
-- `main` and `backup` pin `nixos-26.05`; `workstation` is rolling on `nixos-unstable` (roll it forward with `nix flake update nixpkgs-unstable`). `stateVersion` stays at its install value regardless of channel.
+- `main` and `backup` pin `nixos-26.05`; `workstation` is rolling on `nixos-unstable` — the Hydra-built channel branch, so updates substitute from cache and rarely compile. Roll it forward with `nix flake update nixpkgs-unstable` then `nixos-rebuild switch`. Dry-run first (`nix build --dry-run .#nixosConfigurations.workstation.config.system.build.toplevel`): if a heavy package isn't cached yet, skip the update a day or two rather than compiling it; if a build lands broken, roll back a generation. Occasionally the channel HEAD ships a broken/uncached non-blocking package (Hyprland did on 2026-08-04) — the lock can sit a few evals behind HEAD until it clears. `stateVersion` stays at its install value regardless of channel.
 - Declarative, fully reproducible
 - Everything versioned in Git
 - Tailscale for secure remote access
