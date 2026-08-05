@@ -4,6 +4,11 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
+    # Workstation tracks the rolling nixos-unstable branch; main and backup
+    # stay on the pinned 26.05 release. Only the workstation output builds
+    # against this input. `nix flake update nixpkgs-unstable` rolls it forward.
+    nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
+
     disko = {
       url = "github:nix-community/disko";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -31,7 +36,7 @@
     };
   };
 
-  outputs = { self, nixpkgs, disko, nixos-hardware, agenix, site, ... }:
+  outputs = { self, nixpkgs, nixpkgs-unstable, disko, nixos-hardware, agenix, site, ... }:
   let
     specialArgs = {
       siteConfig = import site;
@@ -66,7 +71,8 @@
         ];
       };
 
-      workstation = nixpkgs.lib.nixosSystem {
+      # Rolling release: built from nixos-unstable, not the pinned 26.05.
+      workstation = nixpkgs-unstable.lib.nixosSystem {
         inherit specialArgs;
         system = "x86_64-linux";
         modules = [

@@ -1,6 +1,6 @@
 # Home Server Config
 
-Fully reproducible NixOS setup spanning a home server (`homeserver`), a Pi backup target (`backupserver`), and the operator's workstation (`workstation`), versioned in Git. A flake at the repo root ties them all to the same pinned nixpkgs.
+Fully reproducible NixOS setup spanning a home server (`homeserver`), a Pi backup target (`backupserver`), and the operator's workstation (`workstation`), versioned in Git. A flake at the repo root pins `main` and `backup` to the same `nixos-26.05` nixpkgs; `workstation` tracks the rolling `nixos-unstable` branch via a separate `nixpkgs-unstable` input.
 
 This file is the single source of truth for architecture, decisions, and the behaviours this repo encodes. Operational setup steps live in each host's `README.md`; the end-to-end install playbook is [`DEPLOY.md`](DEPLOY.md); outstanding work lives in `TODO.md`.
 
@@ -33,8 +33,9 @@ This file is the single source of truth for architecture, decisions, and the beh
 
 ---
 
-## Base OS: NixOS 26.05
+## Base OS: NixOS 26.05 (main + backup); nixos-unstable (workstation)
 
+- `main` and `backup` pin `nixos-26.05`; `workstation` is rolling on `nixos-unstable` (roll it forward with `nix flake update nixpkgs-unstable`). `stateVersion` stays at its install value regardless of channel.
 - Declarative, fully reproducible
 - Everything versioned in Git
 - Tailscale for secure remote access
@@ -214,7 +215,7 @@ The deploy playbook's secrets-inventory section calls this out at install time â
 
 | File | Purpose |
 |---|---|
-| `flake.nix` | Pinned nixpkgs + `nixosConfigurations.main` / `.backup` |
+| `flake.nix` | Pinned `nixos-26.05` nixpkgs (main/backup) + rolling `nixpkgs-unstable` (workstation); `nixosConfigurations.main` / `.backup` / `.workstation` |
 | `keys/*.pub` | Public keys distributed via git: operator SSH key + main's root key (restic SFTP identity) |
 | `README.md` | Top-level index for both hosts |
 | `CLAUDE.md` | This file â€” architecture + decisions |
