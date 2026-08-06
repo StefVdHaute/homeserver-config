@@ -98,6 +98,23 @@ in
   # (signed cmdline, editor disabled) — recovery is an older generation.
   boot.kernelParams = [ "resume_offset=533760" ];
 
+  # Without NumLock the numpad sends arrows, so a passphrase with digits in it
+  # can't be typed at the LUKS prompt. systemd has no NumLock support of its
+  # own, and kbd is in the initrd with only loadkeys and setfont — makeInitrdNG
+  # copies just the files it is handed, so setleds has to be named too.
+  boot.initrd.systemd.storePaths = [ "${pkgs.kbd}/bin/setleds" ];
+
+  boot.initrd.systemd.services.numlock = {
+    description = "Enable NumLock on the console";
+    wantedBy = [ "initrd.target" ];
+    after = [ "systemd-vconsole-setup.service" ];
+    before = [ "cryptsetup-pre.target" "systemd-ask-password-console.service" ];
+    unitConfig.DefaultDependencies = false;
+    serviceConfig.Type = "oneshot";
+    # /dev/console because that is the terminal the password agent prompts on.
+    script = "${pkgs.kbd}/bin/setleds -D +num < /dev/console";
+  };
+
   # Materialize the `site` flake input at its canonical path, same as main
   # does. This host never reads `siteConfig`, but flake inputs are fetched
   # eagerly, so `.#workstation` will not evaluate at all without the file
