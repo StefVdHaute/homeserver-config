@@ -178,6 +178,12 @@ in
     enable = true;
     plugins = with pkgs; [ thunar-archive-plugin thunar-volman ];
   };
+
+  programs.firefox = {
+    enable = true;
+    policies.SearchEngines.Default = "DuckDuckGo";
+  };
+
   services.gvfs.enable = true;
   services.tumbler.enable = true;
 
@@ -456,9 +462,6 @@ in
     xarchiver
 
     # Apps
-    # Bitwarden is used via the Firefox extension + the self-hosted Vaultwarden
-    # web vault; the desktop app pulls an EOL Electron. See MIGRATION.md.
-    firefox
     spotify
     gimp
     blender
