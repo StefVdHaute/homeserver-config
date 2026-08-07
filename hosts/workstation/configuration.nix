@@ -174,6 +174,22 @@ in
   programs.uwsm.enable = true;
   programs.hyprlock.enable = true;   # also registers the hyprlock PAM service
   programs.zsh.enable = true;
+
+  # direnv + nix-direnv, so a project's toolchain activates on `cd` from its own
+  # flake instead of being added to systemPackages or a profile. nix-direnv is
+  # the half that makes that affordable, and it is on by default here: it caches
+  # the evaluated devShell and registers it as a GC root, so re-entering a
+  # project is instant and the weekly `nix.gc` below cannot collect a shell
+  # that is still in use.
+  #
+  # The zsh hook is appended to /etc/zshrc via programs.zsh.interactiveShellInit
+  # (enableZshIntegration defaults true). It registers into the
+  # `precmd_functions` array, while the Stow-managed ~/.config/zsh/.zshrc
+  # defines a `precmd` function — separate zsh mechanisms that both run, so the
+  # dotfiles need no matching change and keep working unmodified on Arch.
+  # Takes effect on next login, not on switch.
+  programs.direnv.enable = true;
+
   programs.thunar = {
     enable = true;
     plugins = with pkgs; [ thunar-archive-plugin thunar-volman ];
