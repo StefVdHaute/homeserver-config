@@ -34,6 +34,47 @@ let
     printf '[Icon Theme]\nName=default\nComment=Redirect to Adwaita\nInherits=Adwaita\n' \
       > $out/share/icons/default/index.theme
   '';
+
+  # An LD_PRELOAD shim that wraps getaddrinfo and cef_urlrequest_create inside
+  # the Spotify client and drops every request outside its allowlist. nixpkgs
+  # does not carry it (NixOS/nixpkgs#209784), so build it here from the
+  # upstream tag — pure Rust, no native dependencies.
+  #
+  # Config lookup is $XDG_CONFIG_HOME/spotify-adblock/config.toml if that file
+  # exists, else /etc/spotify-adblock/config.toml. The crate is built with
+  # `panic = "abort"`, so a missing config aborts Spotify itself rather than
+  # degrading to no-op — hence the environment.etc entry further down, which
+  # plants upstream's own list as the fallback.
+  spotifyAdblock = pkgs.rustPlatform.buildRustPackage rec {
+    pname = "spotify-adblock";
+    version = "1.1.0";
+    src = pkgs.fetchFromGitHub {
+      owner = "abba23";
+      repo = "spotify-adblock";
+      tag = "v${version}";
+      hash = "sha256-Em8ICO+GtA1k/urBA7e9+OdZmHvthTy+iRWueUz4+40=";
+    };
+    cargoHash = "sha256-gxGetdqaoJa/ZF1VnW6UXJyJfLBGZxZnyKpT/Qk/8Og=";
+    postInstall = ''
+      install -Dm444 config.toml $out/share/spotify-adblock/config.toml
+    '';
+  };
+
+  # Wrap rather than override: pkgs.spotify is an unpacked snap that already
+  # carries its own makeWrapper layer, and LD_PRELOAD set on the outside
+  # propagates through it to the real binary. Its .desktop file ships
+  # `Exec=spotify %U` — PATH-relative, so the launcher picks this wrapper up
+  # too, provided this is what systemPackages installs and plain pkgs.spotify
+  # never is.
+  spotifyAdblocked = pkgs.symlinkJoin {
+    name = "spotify-adblocked";
+    paths = [ pkgs.spotify ];
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+    postBuild = ''
+      wrapProgram $out/bin/spotify \
+        --set LD_PRELOAD ${spotifyAdblock}/lib/libspotifyadblock.so
+    '';
+  };
 in
 {
   imports = [
@@ -478,12 +519,18 @@ in
     xarchiver
 
     # Apps
-    spotify
+    spotifyAdblocked   # pkgs.spotify + the LD_PRELOAD adblock shim
     gimp
     blender
     mpv
     qbittorrent
   ];
+
+  # Fallback allow/deny lists for spotifyAdblock. A per-user file at
+  # ~/.config/spotify-adblock/config.toml still wins if one is ever dropped
+  # there; without either, the shim aborts Spotify on startup.
+  environment.etc."spotify-adblock/config.toml".source =
+    "${spotifyAdblock}/share/spotify-adblock/config.toml";
 
   programs.gnupg.agent = {
     enable = true;
