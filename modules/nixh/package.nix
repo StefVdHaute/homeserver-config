@@ -28,15 +28,15 @@ let
   # end up not knowing which step arms the fleet.
   recipes = {
     check = ''
-      nh os build --diff always --refresh -H ${host} <FLAKE>
+      nh os build --diff always <REFRESH>-H ${host} <FLAKE>
     '';
 
     switch = ''
-      nh os switch --ask --diff always --refresh -H ${host} <FLAKE>
+      nh os switch --ask --diff always <REFRESH>-H ${host} <FLAKE>
     '';
 
     boot = ''
-      nh os boot --ask --diff always --refresh -H ${host} <FLAKE>
+      nh os boot --ask --diff always <REFRESH>-H ${host} <FLAKE>
     '';
 
     bump = ''
@@ -140,12 +140,24 @@ writeShellApplication {
     # flagged: the picker is interactive by definition, and a prompt with a
     # visible default teaches the value a flag would have hidden.
     resolve() {
-      local recipe="$1" arg="''${2-}" reply
+      local recipe="$1" arg="''${2-}" reply refresh
 
       if [[ $recipe == *"<FLAKE>"* ]]; then
         reply=$arg
         [[ -n $reply ]] || read -r -p "flake [$FLAKE_DEFAULT]: " reply
-        recipe=''${recipe//<FLAKE>/''${reply:-$FLAKE_DEFAULT}}
+        reply=''${reply:-$FLAKE_DEFAULT}
+
+        # --refresh only for remote refs. On a github: ref it busts nix's ~1h
+        # tarball cache so a rebuild right after a push sees the new commit.
+        # On a LOCAL flake it instead re-resolves every branch input and
+        # rewrites flake.lock — which silently rolls main and backup's pinned
+        # nixpkgs as a side effect of a read-only check. An existing directory
+        # means local, same test nixup uses to tell a path from a branch.
+        # Trailing space is inside the value so the flagless form has no gap.
+        if [[ -d $reply ]]; then refresh=""; else refresh="--refresh "; fi
+
+        recipe=''${recipe//<REFRESH>/$refresh}
+        recipe=''${recipe//<FLAKE>/$reply}
       fi
 
       if [[ $recipe == *"<TERM>"* ]]; then
