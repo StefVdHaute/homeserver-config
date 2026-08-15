@@ -12,6 +12,7 @@
     htop
     curl
     wget
-    usbutils    # lsusb
+    usbutils
+    smartmontools
   ];
 }
