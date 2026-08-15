@@ -80,6 +80,21 @@ let
     '';
   });
 
+  # Discord is Electron, and nixpkgs' wrapper only adds the Wayland flags when
+  # NIXOS_OZONE_WL is set (linux.nix:255). Nothing sets it here — neither the
+  # Hyprland module nor the Stow-managed hypr/modules/env.lua — so out of the
+  # box it renders through XWayland, which the internal display's scale = 1.25
+  # turns into blurry text.
+  #
+  # commandLineArgs rather than the global variable: NIXOS_OZONE_WL would also
+  # reach pkgs.spotify, whose wrapper reacts to it by unsetting DISPLAY, and
+  # switching a working Spotify's rendering path is not part of installing a
+  # chat client. These are verbatim the flags the gate would have added.
+  discordWayland = pkgs.discord.override {
+    commandLineArgs =
+      "--ozone-platform=wayland --enable-features=WaylandWindowDecorations --enable-wayland-ime=true";
+  };
+
   # Wrap rather than override: pkgs.spotify is an unpacked snap that already
   # carries its own makeWrapper layer, and LD_PRELOAD set on the outside
   # propagates through it to the real binary. Its .desktop file ships
@@ -447,6 +462,7 @@ in
   nixpkgs.config.allowUnfreePredicate = pkg:
     builtins.elem (lib.getName pkg) [
       "claude-code"
+      "discord"
       "spotify"
       "clion"
       "pycharm"
@@ -540,6 +556,7 @@ in
 
     # Apps
     spotifyAdblocked   # pkgs.spotify + the LD_PRELOAD adblock shim
+    discordWayland     # pkgs.discord + the Wayland flags its wrapper gates off
     gimp
     blender
     mpv
