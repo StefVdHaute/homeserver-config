@@ -354,6 +354,30 @@ in
     alsa.enable = true;
     pulse.enable = true;
     jack.enable = true;
+
+    # The ALC295 exposes Mic Boost (0…+30dB) stacked on Capture Volume
+    # (-17.25…+30dB) as one merged ramp, so a source volume of 1.0 puts the
+    # internal mic at +60dB — far enough past unity that the codec's own noise
+    # floor arrives as loud static rather than as speech. WirePlumber ships
+    # device.routes.default-sink-volume at 0.064 but default-source-volume at
+    # 1.0, and that asymmetry is exactly how a freshly-enumerated mic lands
+    # there with nobody having touched a slider.
+    #
+    # These are cubed amplitudes, not slider percentages: 0.001 = 0.1³ is the
+    # 10% slider, which on this codec means Capture at its 0dB step with Mic
+    # Boost off. Setting 0.1 here would ask for a ~46% slider (+32dB) and make
+    # things worse.
+    #
+    # Only consulted when a route has no stored volume — device.restore-routes
+    # still wins for anything already in ~/.local/state/wireplumber/
+    # default-routes, so this is the floor under a lost or first-boot state,
+    # not a pin on the internal mic. It is also global to every source: a USB
+    # headset whose own capture range is just -30…+3dB comes back too quiet
+    # instead of too loud if its state is ever lost, which is the better
+    # direction to fail in.
+    wireplumber.extraConfig."51-default-source-volume" = {
+      "wireplumber.settings"."device.routes.default-source-volume" = 0.001;
+    };
   };
 
   # environment.systemPackages does not install a package's systemd units, and
