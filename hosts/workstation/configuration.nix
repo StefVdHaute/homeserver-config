@@ -60,6 +60,26 @@ let
     '';
   };
 
+  # thunar-archive-plugin resolves its helper script as
+  # LIBEXECDIR/thunar-archive-plugin/<desktop-id>.tap, and LIBEXECDIR is
+  # compiled into the .so — so it only ever looks inside its *own* store path.
+  # The taps it ships there are for file-roller, engrampa and ark. xarchiver
+  # does ship the matching xarchiver.tap, but under xarchiver's own prefix,
+  # which the plugin never reads. With xarchiver the only registered handler
+  # for archive MIME types, the candidate list filters down to empty and every
+  # context-menu entry fails with "No suitable archive manager found".
+  #
+  # overrideAttrs is what makes this fixable: it rebuilds the plugin, so the
+  # LIBEXECDIR baked into the .so is the same fresh $out that postInstall drops
+  # the script into. A symlinkJoin or a wrapper cannot work here — they produce
+  # a path the compiled-in constant does not point at.
+  thunarArchivePluginWithXarchiver = pkgs.thunar-archive-plugin.overrideAttrs (old: {
+    postInstall = (old.postInstall or "") + ''
+      install -Dm555 ${pkgs.xarchiver}/libexec/thunar-archive-plugin/xarchiver.tap \
+        $out/libexec/thunar-archive-plugin/xarchiver.tap
+    '';
+  });
+
   # Wrap rather than override: pkgs.spotify is an unpacked snap that already
   # carries its own makeWrapper layer, and LD_PRELOAD set on the outside
   # propagates through it to the real binary. Its .desktop file ships
@@ -233,7 +253,7 @@ in
 
   programs.thunar = {
     enable = true;
-    plugins = with pkgs; [ thunar-archive-plugin thunar-volman ];
+    plugins = [ thunarArchivePluginWithXarchiver pkgs.thunar-volman ];
   };
 
   programs.firefox = {
