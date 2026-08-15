@@ -10,8 +10,7 @@
 
 { lib
 , writeShellApplication
-, writeText
-, linkFarm
+, runCommand
 , nh
 , fzf
 , git
@@ -95,24 +94,36 @@ let
     { verb = "find";   blurb = "Search nixpkgs for a package"; }
   ];
 
-  # One file per verb in the store. The picker cats them for its preview and
-  # the runner reads the same file — one source of truth for the command text.
-  recipeDir = linkFarm "nixh-recipes"
-    (lib.mapAttrsToList (verb: text: {
-      name = verb;
-      path = writeText "nixh-recipe-${verb}" text;
-    }) recipes);
+  # Left-aligned columns. fixedWidthString pads on the left, which would glue
+  # the verb to its blurb and break fzf's {1} field along with it.
+  padTo = width: s: s + lib.concatStrings (lib.genList (_: " ") (width - lib.stringLength s));
 
-  menuText = writeText "nixh-menu"
-    (lib.concatMapStrings (e: "${lib.fixedWidthString 8 " " e.verb}${e.blurb}\n") menu);
+  # Menu and every recipe in ONE derivation. A store path per verb (linkFarm +
+  # a writeText each) shows up as a separate line in every `nh` diff forever,
+  # and each new verb adds another. The text rides in as build-time env vars
+  # so no shell quoting or heredoc delimiter can be tripped by recipe content.
+  #
+  # The picker cats $RECIPES/<verb> for its preview and the runner reads the
+  # same file — one source of truth for the command text.
+  data = runCommand "nixh-data"
+    (lib.mapAttrs' (verb: text: lib.nameValuePair "recipe_${verb}" text) recipes // {
+      menuText = lib.concatMapStrings (e: "${padTo 8 e.verb}${e.blurb}\n") menu;
+    })
+    ''
+      mkdir -p $out/recipes
+      printf '%s' "$menuText" > $out/menu
+      ${lib.concatStrings (lib.mapAttrsToList (verb: _: ''
+        printf '%s' "$recipe_${verb}" > $out/recipes/${verb}
+      '') recipes)}
+    '';
 in
 
 writeShellApplication {
   name = "nixh";
   runtimeInputs = [ nh fzf git nix coreutils ];
   text = ''
-    RECIPES=${recipeDir}
-    MENU=${menuText}
+    RECIPES=${data}/recipes
+    MENU=${data}/menu
     FLAKE_DEFAULT=${lib.escapeShellArg flake}
 
     usage() {

@@ -83,5 +83,14 @@
         ];
       };
     };
+
+    # nixh is deliberately standalone — it has no dependency on the rest of
+    # this flake, so it can be built, run or split into its own repo without
+    # touching a host config. Every host gets it via modules/common.nix; this
+    # output is for ad-hoc runs and for testing the package on its own.
+    packages.x86_64-linux.nixh =
+      nixpkgs-unstable.legacyPackages.x86_64-linux.callPackage ./modules/nixh/package.nix {
+        host = "workstation";
+      };
   };
 }
