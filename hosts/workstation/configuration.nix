@@ -81,10 +81,10 @@ let
   });
 
   # Discord is Electron, and nixpkgs' wrapper only adds the Wayland flags when
-  # NIXOS_OZONE_WL is set (linux.nix:255). Nothing sets it here — neither the
-  # Hyprland module nor the Stow-managed hypr/modules/env.lua — so out of the
-  # box it renders through XWayland, which the internal display's scale = 1.25
-  # turns into blurry text.
+  # NIXOS_OZONE_WL and WAYLAND_DISPLAY are both set (linux.nix:230). Nothing
+  # sets the former here — neither the Hyprland module nor the Stow-managed
+  # hypr/modules/env.lua — so out of the box it renders through XWayland,
+  # which the internal display's scale = 1.25 turns into blurry text.
   #
   # commandLineArgs rather than the global variable: NIXOS_OZONE_WL would also
   # reach pkgs.spotify, whose wrapper reacts to it by unsetting DISPLAY, and
@@ -486,7 +486,11 @@ in
   nixpkgs.config.allowUnfreePredicate = pkg:
     builtins.elem (lib.getName pkg) [
       "claude-code"
+      # pkgs.discord is an FHS wrapper around a separate unwrapped package
+      # since the 2026-08-13 unstable roll, and both derivations carry the
+      # same unfree meta — so the predicate has to name both.
       "discord"
+      "discord-unwrapped"
       "spotify"
       "clion"
       "pycharm"
