@@ -244,15 +244,11 @@
     [ "ntfy-infra-failure@tailscaled.service" ];
 
   # /mnt/backups mount failure (USB drive detached, fs errors, etc.).
-  # The mount unit is auto-generated (by disko/fileSystems), so we attach
-  # OnFailure via a drop-in rather than redefining the unit. `nofail` in
-  # the fs options keeps boot succeeding, but the unit still enters
-  # `failed` state and fires OnFailure.
   systemd.units."mnt-backups.mount" = {
-    overrideStrategy = "asDropinIfExists";
+    overrideStrategy = "asDropin";
     text = ''
       [Unit]
-      OnFailure=ntfy-infra-failure@mnt-backups.mount
+      OnFailure=ntfy-infra-failure@mnt-backups.mount.service
     '';
   };
 
