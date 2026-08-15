@@ -18,7 +18,7 @@
     disk = {
       data = {
         type = "disk";
-        device = "/dev/disk/by-id/CHANGE-ME";
+        device = "/dev/disk/by-id/usb-ICY_BOX_IB-1806MT-CU31_20114400532209355-0:0";
         content = {
           type = "gpt";
           partitions.data = {
