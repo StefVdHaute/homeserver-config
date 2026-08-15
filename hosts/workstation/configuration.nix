@@ -587,6 +587,7 @@ in
     discordWayland     # pkgs.discord + the Wayland flags its wrapper gates off
     gimp
     blender
+    kicad
     mpv
     qbittorrent
   ];
