@@ -1,4 +1,4 @@
-{ config, lib, pkgs, ntfyNotify, siteConfig, sitePath, operatorPubkeyPath, ... }:
+{ config, lib, pkgs, ntfyNotify, siteConfig, operatorPubkeyPath, ... }:
 
 let
   # Per-site values come in as `siteConfig` via specialArgs from flake.nix
@@ -103,12 +103,16 @@ in
   # providers, replace the variable name accordingly and flip
   # `dnsProvider` below.
   # ============================================================
-  # Materialize the `site` flake input at its canonical path: flake.lock
-  # only verifies path inputs, so on-device rebuilds (auto-upgrade) need
-  # the file present locally. Caveat: after editing site.nix + relocking,
-  # the first rebuild must run from the workstation — the on-disk copy
-  # still has the old content until that rebuild lands.
-  environment.etc."nixos/site.nix".source = sitePath;
+  # `/etc/nixos/site.nix` is operator-managed and must be a REAL file here:
+  # flake.lock only verifies path inputs, so on-device rebuilds (auto-upgrade)
+  # need the content present locally.
+  #
+  # It is deliberately NOT materialized via `environment.etc`. Doing that
+  # pointed /etc/nixos/site.nix at the `site` input's own store copy, and
+  # that copy was itself a symlink back to /etc/static — the input fetching
+  # its own output. The resulting cycle made the flake unevaluable, and it
+  # could not self-heal because environment.etc can only place the file on a
+  # machine that already has it. See DEPLOY.md §2 for creating it.
 
   security.acme = {
     acceptTerms = true;

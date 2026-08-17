@@ -40,7 +40,6 @@
   let
     specialArgs = {
       siteConfig = import site;
-      sitePath = site;
       operatorPubkeyPath = ./keys/operator.pub;
       mainRootPubkeyPath = ./keys/main-root.pub;
     };

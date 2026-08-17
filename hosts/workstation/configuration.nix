@@ -1,4 +1,4 @@
-{ config, lib, pkgs, operatorPubkeyPath, sitePath, ... }:
+{ config, lib, pkgs, operatorPubkeyPath, ... }:
 
 let
   # Bridge for the Stow-managed dotfiles, which stay the source of truth for
@@ -191,18 +191,13 @@ in
     script = "${pkgs.kbd}/bin/setleds -D +num < /dev/console";
   };
 
-  # Materialize the `site` flake input at its canonical path, same as main
-  # does. This host never reads `siteConfig`, but flake inputs are fetched
-  # eagerly, so `.#workstation` will not evaluate at all without the file
-  # present — verified empirically, see MIGRATION.md. Without this line the
-  # installed system can't rebuild itself.
+  # `/etc/nixos/site.nix` must exist here as a REAL file even though this host
+  # never reads `siteConfig` — flake inputs are fetched eagerly, so
+  # `.#workstation` will not evaluate without it (verified empirically, see
+  # MIGRATION.md).
   #
-  # Note this does not bootstrap: `environment.etc` can only place the file
-  # if the machine doing the evaluation already has it. A fresh install
-  # needs one manual copy before its first rebuild; from then on this keeps
-  # it in place. Same caveat as main — after editing site.nix and relocking,
-  # the first rebuild must run somewhere the real file already lives.
-  environment.etc."nixos/site.nix".source = sitePath;
+  # It is deliberately NOT materialized via `environment.etc`; that is what
+  # created the symlink cycle described in hosts/main/configuration.nix.
 
   networking.hostName = "workstation";
   networking.networkmanager.enable = true;
@@ -549,6 +544,10 @@ in
     # Shell + CLI
     bash
     python3           # interpreter for Claude Code plugin hooks (hookify)
+    # Plain vim and nano come from modules/common.nix; this host also gets
+    # neovim for the Stow-managed ~/.config/nvim. That config bootstraps
+    # lazy.nvim over git, so no plugin belongs in this file.
+    neovim
     stow
     file
     unzip
