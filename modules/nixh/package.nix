@@ -28,23 +28,23 @@ let
   # end up not knowing which step arms the fleet.
   recipes = {
     check = ''
-      nh os build --diff always <REFRESH>-H ${host} <FLAKE>
+      nh os build --diff always <REFRESH>-H ${host} <EXTRA> <FLAKE>
     '';
 
     switch = ''
-      nh os switch --ask --diff always <REFRESH>-H ${host} <FLAKE>
+      nh os switch --ask --diff always <REFRESH>-H ${host} <EXTRA> <FLAKE>
     '';
 
     boot = ''
-      nh os boot --ask --diff always <REFRESH>-H ${host} <FLAKE>
+      nh os boot --ask --diff always <REFRESH>-H ${host} <EXTRA> <FLAKE>
     '';
 
     bump = ''
       cd ${repo}
       nix flake update nixpkgs nixpkgs-unstable
-      nix build --no-link --dry-run .#nixosConfigurations.main.config.system.build.toplevel
-      nix build --no-link --dry-run .#nixosConfigurations.backup.config.system.build.toplevel
-      nix build --no-link --dry-run .#nixosConfigurations.workstation.config.system.build.toplevel
+      nix build --no-link --dry-run <EXTRA> .#nixosConfigurations.main.config.system.build.toplevel
+      nix build --no-link --dry-run <EXTRA> .#nixosConfigurations.backup.config.system.build.toplevel
+      nix build --no-link --dry-run <EXTRA> .#nixosConfigurations.workstation.config.system.build.toplevel
     '';
 
     commit = ''
@@ -57,8 +57,8 @@ let
 
     fleet = ''
       cd ${repo}
-      nix build --no-link --dry-run .#nixosConfigurations.main.config.system.build.toplevel
-      nix build --no-link --dry-run .#nixosConfigurations.backup.config.system.build.toplevel
+      nix build --no-link --dry-run <EXTRA> .#nixosConfigurations.main.config.system.build.toplevel
+      nix build --no-link --dry-run <EXTRA> .#nixosConfigurations.backup.config.system.build.toplevel
     '';
 
     gens = ''
@@ -70,11 +70,11 @@ let
     '';
 
     gc = ''
-      nh clean all --ask --keep 10 --keep-since <AGE>
+      nh clean all --ask <EXTRA> --keep 10 --keep-since <AGE>
     '';
 
     find = ''
-      nh search packages <TERM>
+      nh search packages <EXTRA> <TERM>
     '';
   };
 
@@ -129,9 +129,10 @@ writeShellApplication {
     usage() {
       echo "nixh — pick a nix command, see it, run it."
       echo
-      echo "  nixh                 open the picker"
-      echo "  nixh <verb> [arg]    run a verb directly"
-      echo "  nixh list            print every verb and its recipe"
+      echo "  nixh                          open the picker (alt-enter to add flags)"
+      echo "  nixh <verb> [arg]             run a verb directly"
+      echo "  nixh <verb> [arg] -- <flags>  ...passing extra flags to the command"
+      echo "  nixh list                     print every verb and its recipe"
       echo
       sed 's/^/  /' "$MENU"
     }
@@ -140,7 +141,17 @@ writeShellApplication {
     # flagged: the picker is interactive by definition, and a prompt with a
     # visible default teaches the value a flag would have hidden.
     resolve() {
-      local recipe="$1" arg="''${2-}" reply refresh
+      local recipe="$1" arg="''${2-}" extra="''${3-}" reply refresh
+
+      # Pass-through flags (--impure, --show-trace, -L …). The token swallows
+      # the space after it, so the no-flags form has no double gap and needs
+      # no trailing-space trick in the value. Only the verbs that invoke nix,
+      # nh or nixos-rebuild carry <EXTRA>; commit and push deliberately do not.
+      if [[ -n $extra ]]; then
+        recipe=''${recipe//"<EXTRA> "/"$extra "}
+      else
+        recipe=''${recipe//"<EXTRA> "/}
+      fi
 
       if [[ $recipe == *"<FLAKE>"* ]]; then
         reply=$arg
@@ -182,7 +193,7 @@ writeShellApplication {
     }
 
     run() {
-      local verb="$1" arg="''${2-}" recipe
+      local verb="$1" arg="''${2-}" extra="''${3-}" recipe raw
 
       if [[ ! -f $RECIPES/$verb ]]; then
         echo "nixh: no such verb: $verb" >&2
@@ -190,7 +201,15 @@ writeShellApplication {
         return 1
       fi
 
-      recipe=$(resolve "$(cat "$RECIPES/$verb")" "$arg")
+      raw=$(cat "$RECIPES/$verb")
+
+      # commit, push, gens and roll carry no <EXTRA>. Say so rather than
+      # accept the flags and silently drop them.
+      if [[ -n $extra && $raw != *"<EXTRA>"* ]]; then
+        echo "nixh: $verb takes no extra flags — ignoring: $extra" >&2
+      fi
+
+      recipe=$(resolve "$raw" "$arg" "$extra")
 
       # Show it before running it. This is the whole point of the tool.
       echo
@@ -215,17 +234,35 @@ writeShellApplication {
         done
         ;;
       "")
-        if selection=$(fzf --height=60% --reverse --border \
-                           --prompt='nixh > ' \
-                           --header='select a command — the preview is exactly what will run' \
-                           --preview="cat $RECIPES/{1}" \
-                           --preview-window='down,45%,border-top' \
-                           < "$MENU"); then
-          run "''${selection%% *}"
+        # --expect puts the pressed key on line 1 and the selection on line 2,
+        # so alt-enter can mean "same verb, but let me add flags first".
+        if picked=$(fzf --height=60% --reverse --border \
+                        --prompt='nixh > ' \
+                        --expect=alt-enter \
+                        --header='enter: run  ·  alt-enter: run with extra flags' \
+                        --preview="cat $RECIPES/{1}" \
+                        --preview-window='down,45%,border-top' \
+                        < "$MENU"); then
+          key=$(head -1 <<< "$picked")
+          selection=$(sed -n 2p <<< "$picked")
+          extra=""
+          if [[ $key == alt-enter ]]; then
+            read -r -p "extra flags (e.g. --impure --show-trace): " extra
+          fi
+          run "''${selection%% *}" "" "$extra"
         fi
         ;;
       *)
-        run "$1" "''${2-}"
+        # nixh <verb> [arg] [-- extra flags...]
+        verb=$1
+        shift
+        arg=""
+        if [[ -n ''${1-} && ''${1-} != "--" ]]; then
+          arg=$1
+          shift
+        fi
+        [[ ''${1-} == "--" ]] && shift
+        run "$verb" "$arg" "$*"
         ;;
     esac
   '';
