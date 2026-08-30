@@ -197,6 +197,27 @@ in
   # (signed cmdline, editor disabled) — recovery is an older generation.
   boot.kernelParams = [ "resume_offset=533760" ];
 
+  # Latest mainline rather than the nixpkgs default. 7.2 carries the newer
+  # amdgpu and cros_ec work this laptop benefits from; the default is 6.18.
+  boot.kernelPackages = pkgs.linuxPackages_latest;
+
+  # …and the nixpkgs default kernel stays reachable as a boot entry, for the
+  # release where a mainline bump breaks amdgpu, suspend, or the out-of-tree
+  # framework-laptop-kmod. `pkgs.linuxPackages`, not a pinned series: a pinned
+  # one goes EOL and is dropped from nixpkgs, which fails at eval.
+  #
+  # mkForce because the line above sets the same option at normal priority,
+  # and a specialisation merges with its parent.
+  #
+  # The Limine module renders this: each generation becomes a submenu holding
+  # "Default" first, then one entry per specialisation, and it moves
+  # default_entry from 2 to 3 so "Default" — the latest kernel — stays the
+  # boot default. extraEntries (Arch) are appended after, so they do not shift
+  # that index.
+  specialisation.lts.configuration = {
+    boot.kernelPackages = lib.mkForce pkgs.linuxPackages;
+  };
+
   # Without NumLock the numpad sends arrows, so a passphrase with digits in it
   # can't be typed at the LUKS prompt. systemd has no NumLock support of its
   # own, and kbd is in the initrd with only loadkeys and setfont — makeInitrdNG
