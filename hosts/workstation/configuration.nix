@@ -390,23 +390,12 @@ in
     defaultSession = "hyprland-uwsm";
   };
 
-  # polkit_gnome ships only an XDG autostart entry marked
-  # OnlyShowIn=GNOME;XFCE, which never fires under Hyprland — so the agent
-  # needs an explicit unit. uwsm reaches graphical-session.target only after
-  # importing the session environment, so order against that.
-  systemd.user.services."polkit-gnome-authentication-agent-1" = {
-    description = "polkit-gnome-authentication-agent-1";
-    after = [ "graphical-session.target" ];
-    partOf = [ "graphical-session.target" ];
-    wantedBy = [ "graphical-session.target" ];
-    serviceConfig = {
-      Type = "simple";
-      ExecStart = "${pkgs.polkit_gnome}/libexec/polkit-gnome-authentication-agent-1";
-      Restart = "on-failure";
-      RestartSec = 1;
-      TimeoutStopSec = 10;
-    };
-  };
+  # No explicit polkit agent unit here. nixpkgs ships its own copy of
+  # polkit-gnome-authentication-agent-1.desktop with the OnlyShowIn line
+  # commented out, so uwsm starts the agent from XDG autostart as
+  # app-polkit\x2d…@autostart.service. A second, explicit unit loses the
+  # race, and one sat permanently failed here until 2026-08-30.
+  # polkit_gnome stays in systemPackages: that autostart file comes from it.
 
   security.rtkit.enable = true;
   services.pipewire = {
