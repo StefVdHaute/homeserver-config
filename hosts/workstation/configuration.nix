@@ -262,7 +262,7 @@ in
 
   users.users.stef = {
     isNormalUser = true;
-    extraGroups = [ "wheel" "networkmanager" "video" "audio" "input" "docker" ];
+    extraGroups = [ "wheel" "networkmanager" "video" "audio" "input" "docker" "gamemode" ];
     shell = pkgs.zsh;
     openssh.authorizedKeys.keyFiles = [ operatorPubkeyPath ];
   };
@@ -350,6 +350,22 @@ in
   # and while one is running it switches the CPU governor to performance and
   # raises I/O priority, reverting on exit. Nothing happens until a game asks.
   programs.gamemode.enable = true;
+
+  # gamemode's shipped polkit policy sets allow_active=no on all four of its
+  # helper actions, so pkexec refuses them for every user and no password
+  # prompt can override that — authorization has to come from a rule. The
+  # module creates the gamemode group and enables polkit but ships no such
+  # rule, so until now every launch logged "Failed to update cpu governor
+  # policy" and the governor stayed on powersave. The prefix match covers all
+  # four helpers; gamemode only invokes the ones its own config asks for.
+  security.polkit.extraConfig = ''
+    polkit.addRule(function(action, subject) {
+      if (action.id.indexOf("com.feralinteractive.GameMode.") == 0 &&
+          subject.isInGroup("gamemode")) {
+        return polkit.Result.YES;
+      }
+    });
+  '';
 
   xdg.portal = {
     enable = true;
