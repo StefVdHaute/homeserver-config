@@ -99,6 +99,24 @@ let
       "--ozone-platform=wayland --enable-features=WaylandWindowDecorations --enable-wayland-ime=true";
   };
 
+  # waybar 0.15.0 still speaks the pre-Lua IPC dialect ("dispatch workspace 3").
+  # Hyprland >= 0.55 with a hyprland.lua evaluates every dispatch request as
+  # Lua and rejects that string, so a click on a workspace in the bar silently
+  # does nothing. Upstream fixed it on master (Alexays/Waybar e17c0d9f and its
+  # follow-ups, 2026-04..08) but has tagged no release since 0.15.0; the patch
+  # is those commits rebased onto 0.15.0, so it is gated on that exact version.
+  # The next nixpkgs waybar bump retires it on its own: plain waybar comes back
+  # and the warning says to delete this block and the patch file. Both
+  # systemd.packages and systemPackages must use this one.
+  waybarLuaIpc =
+    if pkgs.waybar.version == "0.15.0" then
+      pkgs.waybar.overrideAttrs (old: {
+        patches = (old.patches or [ ]) ++ [ ./waybar-hyprland-lua-ipc.patch ];
+      })
+    else
+      lib.warn "waybar is ${pkgs.waybar.version}: the Hyprland Lua-IPC backport is obsolete, delete waybarLuaIpc and waybar-hyprland-lua-ipc.patch"
+        pkgs.waybar;
+
   # Wrap rather than override: pkgs.spotify is an unpacked snap that already
   # carries its own makeWrapper layer, and LD_PRELOAD set on the outside
   # propagates through it to the real binary. Its .desktop file ships
@@ -452,7 +470,7 @@ in
   # are the packages' own; each is already PartOf/After graphical-session.target.
   # Nothing execs these from the hypr config — the desktop expects user units,
   # which is what uwsm is for.
-  systemd.packages = with pkgs; [ mako waybar hypridle hyprpaper ];
+  systemd.packages = with pkgs; [ mako waybarLuaIpc hypridle hyprpaper ];
   systemd.user.services.mako.wantedBy = [ "graphical-session.target" ];
   systemd.user.services.waybar.wantedBy = [ "graphical-session.target" ];
   systemd.user.services.hypridle.wantedBy = [ "graphical-session.target" ];
@@ -587,7 +605,7 @@ in
   environment.systemPackages = with pkgs; [
     # Wayland desktop
     alacritty
-    waybar
+    waybarLuaIpc       # pkgs.waybar + the Hyprland Lua-IPC backport, see the let block
     wofi
     mako
     hyprpaper

@@ -239,6 +239,7 @@ The deploy playbook's secrets-inventory section calls this out at install time â
 | `hosts/workstation/configuration.nix` | Workstation NixOS config (Hyprland, PipeWire, greetd/tuigreet, Tailscale leaf, no service-hosting) |
 | `hosts/workstation/disko.nix` | Declarative disk layout: ESP + LUKS-encrypted btrfs `@nixos` on `/dev/nvme1n1` |
 | `hosts/workstation/hardware-configuration.nix` | Hand-authored platform stub: AMD CPU + NVMe initrd modules; Framework 16-specific bits come from `nixos-hardware.nixosModules.framework-16-7040-amd` |
+| `hosts/workstation/waybar-hyprland-lua-ipc.patch` | Upstream waybar fix (Alexays/Waybar e17c0d9f + follow-ups) rebased onto 0.15.0: sends Hyprland Lua-style dispatches so workspace clicks work with a `hyprland.lua` config. Applied via `waybarLuaIpc` in the workstation config; drop when nixpkgs ships waybar > 0.15.0. |
 
 ---
 
