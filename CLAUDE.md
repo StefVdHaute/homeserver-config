@@ -35,7 +35,7 @@ This file is the single source of truth for architecture, decisions, and the beh
 
 ## Base OS: NixOS 26.05 (main + backup); nixos-unstable (workstation)
 
-- `main` and `backup` pin `nixos-26.05`; `workstation` is rolling on `nixos-unstable` — the Hydra-built channel branch, so updates substitute from cache and rarely compile. Roll it forward with `nix flake update nixpkgs-unstable` then `nixos-rebuild switch`. Dry-run first (`nix build --dry-run .#nixosConfigurations.workstation.config.system.build.toplevel`): if a heavy package isn't cached yet, skip the update a day or two rather than compiling it; if a build lands broken, roll back a generation. Occasionally the channel HEAD ships a broken/uncached non-blocking package (Hyprland did on 2026-08-04) — the lock can sit a few evals behind HEAD until it clears. `stateVersion` stays at its install value regardless of channel.
+- `main` and `backup` pin `nixos-26.05`; `workstation` is rolling on `nixos-unstable` — the Hydra-built channel branch, so updates substitute from cache and rarely compile. Roll it forward with `nix flake update nixpkgs-unstable` then `nixos-rebuild switch`. Dry-run first (`nix build --dry-run .#nixosConfigurations.workstation.config.system.build.toplevel`): if a heavy package isn't cached yet, skip the update a day or two rather than compiling it; if a build lands broken, roll back a generation. Occasionally the channel HEAD ships a broken/uncached non-blocking package (Hyprland did on 2026-08-04) — the lock can sit a few evals behind HEAD until it clears. `stateVersion` stays at its install value regardless of channel. The spotify-adblock shim is pinned by version + hashes, not a flake input, so `nix flake update` never moves it — bump it separately with `nix-update --flake spotify-adblock --version=stable` (reads upstream's GitHub releases feed, rewrites the hashes).
 - Declarative, fully reproducible
 - Everything versioned in Git
 - Tailscale for secure remote access
@@ -223,6 +223,7 @@ The deploy playbook's secrets-inventory section calls this out at install time �
 | `TODO.md` | Outstanding tasks |
 | `modules/common.nix` | Shared baseline package set (git, vim, htop, curl, wget, usbutils). Imported by all three hosts. |
 | `modules/alerts.nix` | Shared NixOS module: ntfy helper, smartd wiring, templated failure notifiers. Imported by both hosts. |
+| `modules/spotify-adblock/package.nix` | Source build of the spotify-adblock LD_PRELOAD shim (not in nixpkgs). The workstation consumes it via `callPackage`; the flake exposes it as `packages.x86_64-linux.spotify-adblock` so `nix-update --flake spotify-adblock --version=stable` can bump it against upstream's GitHub releases. |
 | `hosts/main/configuration.nix` | Main host NixOS config (boot, RAID, Docker, SSH, Tailscale, firewall, auto-upgrade) |
 | `hosts/main/disko.nix` | Declarative disk layout: boot SSD (ESP + swap + btrfs `@nixos` at `/`) + mdadm RAID 10 over 4 spinners with btrfs `@data` at `/mnt/data` |
 | `hosts/main/hardware-configuration.nix` | Hand-authored platform stub: initrd modules (incl. raid10/md_mod), kvm-intel, Intel microcode |

@@ -91,5 +91,14 @@
       nixpkgs-unstable.legacyPackages.x86_64-linux.callPackage ./modules/nixh/package.nix {
         host = "workstation";
       };
+
+    # spotify-adblock is built from source because nixpkgs does not carry it.
+    # Exposed as a package so nix-update can bump it against upstream's GitHub
+    # releases: `nix-update --flake spotify-adblock --version=stable` rewrites
+    # version, hash and cargoHash in the package file. The workstation
+    # consumes the same file via pkgs.callPackage.
+    packages.x86_64-linux.spotify-adblock =
+      nixpkgs-unstable.legacyPackages.x86_64-linux.callPackage
+        ./modules/spotify-adblock/package.nix { };
   };
 }

@@ -35,30 +35,11 @@ let
       > $out/share/icons/default/index.theme
   '';
 
-  # An LD_PRELOAD shim that wraps getaddrinfo and cef_urlrequest_create inside
-  # the Spotify client and drops every request outside its allowlist. nixpkgs
-  # does not carry it (NixOS/nixpkgs#209784), so build it here from the
-  # upstream tag — pure Rust, no native dependencies.
-  #
-  # Config lookup is $XDG_CONFIG_HOME/spotify-adblock/config.toml if that file
-  # exists, else /etc/spotify-adblock/config.toml. The crate is built with
-  # `panic = "abort"`, so a missing config aborts Spotify itself rather than
-  # degrading to no-op — hence the environment.etc entry further down, which
-  # plants upstream's own list as the fallback.
-  spotifyAdblock = pkgs.rustPlatform.buildRustPackage rec {
-    pname = "spotify-adblock";
-    version = "1.1.0";
-    src = pkgs.fetchFromGitHub {
-      owner = "abba23";
-      repo = "spotify-adblock";
-      tag = "v${version}";
-      hash = "sha256-Em8ICO+GtA1k/urBA7e9+OdZmHvthTy+iRWueUz4+40=";
-    };
-    cargoHash = "sha256-gxGetdqaoJa/ZF1VnW6UXJyJfLBGZxZnyKpT/Qk/8Og=";
-    postInstall = ''
-      install -Dm444 config.toml $out/share/spotify-adblock/config.toml
-    '';
-  };
+  # The LD_PRELOAD adblock shim. Built from modules/spotify-adblock/package.nix,
+  # which is also a flake output so nix-update can bump it against upstream's
+  # GitHub releases — see that file's header. The environment.etc entry further
+  # down plants the config it ships as the system-wide fallback.
+  spotifyAdblock = pkgs.callPackage ../../modules/spotify-adblock/package.nix { };
 
   # thunar-archive-plugin resolves its helper script as
   # LIBEXECDIR/thunar-archive-plugin/<desktop-id>.tap, and LIBEXECDIR is
@@ -668,6 +649,7 @@ in
 
     # System tools
     sbctl              # inspect/verify the Secure Boot chain: sbctl status|verify
+    nix-update         # bumps modules/spotify-adblock: nix-update --flake spotify-adblock --version=stable
     piper
     nvtopPackages.amd
     pciutils           # lspci: friendly GPU names in waybar's custom/gpu tooltip
