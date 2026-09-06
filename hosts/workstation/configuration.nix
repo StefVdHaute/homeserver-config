@@ -683,6 +683,7 @@ in
     kicad
     mpv
     qbittorrent
+    gnome-calculator
   ];
 
   # Fallback allow/deny lists for spotifyAdblock. A per-user file at
