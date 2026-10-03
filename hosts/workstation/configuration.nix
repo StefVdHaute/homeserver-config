@@ -687,6 +687,7 @@ in
     discordWayland     # pkgs.discord + the Wayland flags its wrapper gates off
     gimp
     blender
+    (callPackage ../../modules/blender-mcp/package.nix { })
     kicad
     mpv
     qbittorrent

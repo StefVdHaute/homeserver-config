@@ -100,5 +100,9 @@
     packages.x86_64-linux.spotify-adblock =
       nixpkgs-unstable.legacyPackages.x86_64-linux.callPackage
         ./modules/spotify-adblock/package.nix { };
+
+    packages.x86_64-linux.blender-mcp =
+      nixpkgs-unstable.legacyPackages.x86_64-linux.callPackage
+        ./modules/blender-mcp/package.nix { };
   };
 }
