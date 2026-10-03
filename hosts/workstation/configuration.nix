@@ -22,6 +22,8 @@ let
   # The LD_PRELOAD adblock shim.
   spotifyAdblock = pkgs.callPackage ../../modules/spotify-adblock/package.nix { };
 
+  blenderMcp = pkgs.callPackage ../../modules/blender-mcp/package.nix { };
+
   # The plugin only reads .tap helpers from its own compiled-in LIBEXECDIR, so
   # xarchiver.tap is installed into the rebuilt plugin's $out.
   thunarArchivePluginWithXarchiver = pkgs.thunar-archive-plugin.overrideAttrs (old: {
@@ -455,7 +457,7 @@ in
     discordWayland     # pkgs.discord + the Wayland flags its wrapper gates off
     gimp
     blender
-    (callPackage ../../modules/blender-mcp/package.nix { })
+    blenderMcp
     kicad
     mpv
     qbittorrent
@@ -466,6 +468,11 @@ in
   # config.toml overrides it. Without either, the shim aborts Spotify on startup.
   environment.etc."spotify-adblock/config.toml".source =
     "${spotifyAdblock}/share/spotify-adblock/config.toml";
+
+  # The MCP add-on appears as a read-only System extension; enable it once in
+  # Preferences, with "Allow Online Access" on.
+  environment.sessionVariables.BLENDER_SYSTEM_EXTENSIONS =
+    "${blenderMcp}/share/blender/extensions";
 
   programs.gnupg.agent = {
     enable = true;

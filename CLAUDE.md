@@ -224,7 +224,7 @@ The deploy playbook's secrets-inventory section calls this out at install time â
 | `modules/common.nix` | Shared baseline package set (git, vim, htop, curl, wget, usbutils). Imported by all three hosts. |
 | `modules/alerts.nix` | Shared NixOS module: ntfy helper, smartd wiring, templated failure notifiers. Imported by both hosts. |
 | `modules/spotify-adblock/package.nix` | Source build of the spotify-adblock LD_PRELOAD shim (not in nixpkgs). The workstation consumes it via `callPackage`; the flake exposes it as `packages.x86_64-linux.spotify-adblock` so `nix-update --flake spotify-adblock --version=stable` can bump it against upstream's GitHub releases. |
-| `modules/blender-mcp/package.nix` | Official Blender Lab MCP server (not in nixpkgs), built from the upstream git tag. Flake output `packages.x86_64-linux.blender-mcp` for `nix-update`. The Blender add-on comes from the Blender Lab extensions repository. |
+| `modules/blender-mcp/package.nix` | Official Blender Lab MCP server (not in nixpkgs), built from the upstream git tag. Flake output `packages.x86_64-linux.blender-mcp` for `nix-update`. Also ships the matching Blender add-on, which the workstation exposes as a System extension via `BLENDER_SYSTEM_EXTENSIONS`. |
 | `hosts/main/configuration.nix` | Main host NixOS config (boot, RAID, Docker, SSH, Tailscale, firewall, auto-upgrade) |
 | `hosts/main/disko.nix` | Declarative disk layout: boot SSD (ESP + swap + btrfs `@nixos` at `/`) + mdadm RAID 10 over 4 spinners with btrfs `@data` at `/mnt/data` |
 | `hosts/main/hardware-configuration.nix` | Hand-authored platform stub: initrd modules (incl. raid10/md_mod), kvm-intel, Intel microcode |

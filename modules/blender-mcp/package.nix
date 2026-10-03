@@ -2,8 +2,8 @@
 #
 #   nix-update --flake blender-mcp --version=stable
 #
-# The matching Blender add-on comes from the Blender Lab extensions repository
-# (https://lab.blender.org/).
+# Also ships the matching Blender add-on as a system extension under
+# share/blender/extensions; point BLENDER_SYSTEM_EXTENSIONS there.
 
 { lib
 , python3Packages
@@ -30,6 +30,11 @@ python3Packages.buildPythonApplication rec {
     mcp
     pyyaml
   ];
+
+  postInstall = ''
+    mkdir -p $out/share/blender/extensions/system
+    cp -r ../addon/blender_mcp_addon $out/share/blender/extensions/system/mcp
+  '';
 
   pythonImportsCheck = [ "blmcp" ];
 
