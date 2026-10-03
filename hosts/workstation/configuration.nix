@@ -314,6 +314,9 @@ in
     policies.SearchEngines.Default = "DuckDuckGo";
   };
 
+  # Opens TCP+UDP 1714-1764 for discovery on the LAN.
+  programs.kdeconnect.enable = true;
+
   services.gvfs.enable = true;
   services.tumbler.enable = true;
 
@@ -674,6 +677,10 @@ in
     gparted
     qdirstat
     xarchiver
+
+    # Phone
+    android-tools      # adb + fastboot
+    scrcpy             # phone screen mirror + control over adb
 
     # Apps
     spotifyAdblocked   # pkgs.spotify + the LD_PRELOAD adblock shim
