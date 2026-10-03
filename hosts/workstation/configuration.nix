@@ -184,6 +184,10 @@ in
   # Opens TCP+UDP 1714-1764 for discovery on the LAN.
   programs.kdeconnect.enable = true;
 
+  # Battery state for kdeconnect's battery plugin (and anything else that
+  # asks Solid/UPower about the laptop battery).
+  services.upower.enable = true;
+
   services.gvfs.enable = true;
   services.tumbler.enable = true;
 
@@ -444,6 +448,7 @@ in
     # Phone
     android-tools      # adb + fastboot
     scrcpy             # phone screen mirror + control over adb
+    sshfs              # kdeconnect's "browse files" mounts the phone with it
 
     # Apps
     spotifyAdblocked   # pkgs.spotify + the LD_PRELOAD adblock shim
