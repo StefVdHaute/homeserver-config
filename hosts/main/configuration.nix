@@ -1,17 +1,12 @@
 { config, lib, pkgs, ntfyNotify, siteConfig, operatorPubkeyPath, ... }:
 
 let
-  # Per-site values come in as `siteConfig` via specialArgs from flake.nix
-  # (the flake declares `site` as a path input to /etc/nixos/site.nix).
-  # Expected shape:
+  # `siteConfig` is /etc/nixos/site.nix, shape:
   #   { acmeDomain = "home.dedyn.io"; acmeEmail = "you@example.com"; }
-  # The file must exist on whichever workstation runs `nixos-anywhere`.
-  # See hosts/main/README.md.
   site = siteConfig;
 
-  # Shared options for every restic backup job on this host.
-  # RESTIC_REPOSITORY + RESTIC_PASSWORD live in secrets/restic.env.age,
-  # decrypted at activation by agenix to /run/agenix/restic-env.
+  # Shared options for every restic backup job.
+  # RESTIC_REPOSITORY + RESTIC_PASSWORD come from secrets/restic.env.age.
   resticCommon = {
     environmentFile = config.age.secrets.restic-env.path;
     initialize = true;
@@ -29,11 +24,7 @@ let
     extraBackupArgs = [ "--compression" "max" ];
   };
 
-  # mdadm invokes this on array events with argv: event, array, [device].
-  # Routes to ntfy home-smart so RAID failures surface alongside SMART
-  # alerts. Without a MAILADDR or PROGRAM, mdmon crashes at startup.
-  # writeShellApplication (vs writeShellScript) adds `set -euo pipefail`
-  # by default and runs shellcheck at build time.
+  # mdadm PROGRAM hook; argv: event, array, [device].
   mdadmAlert = pkgs.writeShellApplication {
     name = "mdadm-alert";
     text = ''
@@ -55,16 +46,11 @@ in
   ];
 
   # ============================================================
-  # Secrets (agenix). All three .age files in secrets/ are encrypted to
-  # this host's SSH host key + the operator's pubkey (see secrets/secrets.nix).
+  # Secrets (agenix); recipients in secrets/secrets.nix.
   # ============================================================
   age.secrets = {
-    # /run/agenix/restic-env, root:root 0400 — used as restic's
-    # environmentFile via resticCommon above.
     restic-env.file = ../../secrets/restic.env.age;
 
-    # Read by the security.acme service at issue/renew time. Owner must
-    # match the user the acme module runs as (`acme`).
     acme-credentials = {
       file = ../../secrets/acme-credentials.env.age;
       owner = "acme";
@@ -72,10 +58,7 @@ in
       mode = "0400";
     };
 
-    # main's root SSH private key. Restic (running as root) uses this to
-    # SFTP into the Pi's `restic` user. agenix symlinks /root/.ssh/id_ed25519
-    # to /run/agenix/main-root-sshkey; OpenSSH follows the symlink and
-    # sees the correct mode on the underlying tmpfs file.
+    # Root's SSH identity for restic SFTP to the Pi's `restic` user.
     main-root-sshkey = {
       file = ../../secrets/main-root-sshkey.age;
       path = "/root/.ssh/id_ed25519";
@@ -85,34 +68,19 @@ in
     tailscale-authkey.file = ../../secrets/tailscale-authkey.age;
   };
 
-  # Operator alerts → local ntfy container (127.0.0.1:8085 via compose port map).
+  # Local ntfy container (compose port map).
   alerts.ntfy.url = "http://127.0.0.1:8085";
   alerts.smartd.enable = true;
   alerts.tailscaleHealthcheck.enable = true;
 
   # ============================================================
-  # TLS certificates via Let's Encrypt DNS-01 ACME through deSEC.
-  # Produces a wildcard cert covering *.${site.acmeDomain} at
-  # /var/lib/acme/${site.acmeDomain}/. Caddy reads it via a read-only
-  # bind mount (see hosts/main/compose/caddy.yml + the `acme_tls`
-  # snippet in Caddyfile).
-  #
-  # DNS provider credentials live in secrets/acme-credentials.env.age,
-  # decrypted by agenix to /run/agenix/acme-credentials. For deSEC the
-  # decrypted file contains `DESEC_TOKEN=...`; if you ever switch
-  # providers, replace the variable name accordingly and flip
-  # `dnsProvider` below.
+  # TLS: wildcard Let's Encrypt cert via deSEC DNS-01, written to
+  # /var/lib/acme/${site.acmeDomain}/ and bind-mounted read-only into Caddy.
+  # secrets/acme-credentials.env.age holds `DESEC_TOKEN=...`.
   # ============================================================
-  # `/etc/nixos/site.nix` is operator-managed and must be a REAL file here:
-  # flake.lock only verifies path inputs, so on-device rebuilds (auto-upgrade)
-  # need the content present locally.
-  #
-  # It is deliberately NOT materialized via `environment.etc`. Doing that
-  # pointed /etc/nixos/site.nix at the `site` input's own store copy, and
-  # that copy was itself a symlink back to /etc/static — the input fetching
-  # its own output. The resulting cycle made the flake unevaluable, and it
-  # could not self-heal because environment.etc can only place the file on a
-  # machine that already has it. See DEPLOY.md §2 for creating it.
+  # /etc/nixos/site.nix must be a real file on this host; auto-upgrade
+  # evaluates the flake against it. Never manage it via environment.etc:
+  # the `site` input then points at its own output and the flake stops evaluating.
 
   security.acme = {
     acceptTerms = true;
@@ -122,23 +90,15 @@ in
     domain = site.acmeDomain;
     extraDomainNames = [ "*.${site.acmeDomain}" ];
     dnsProvider = "desec";
-    environmentFile = config.age.secrets.acme-credentials.path;   # 26.05: renamed from credentialsFile
+    environmentFile = config.age.secrets.acme-credentials.path;
     group = "caddy-certs";
     reloadServices = [ "caddy-reload-certs.service" ];
   };
 
-  # Group the acme user and the Caddy container both belong to, so
-  # cert files (owned acme:caddy-certs, mode 0640) are readable by
-  # Caddy. Fixed GID so compose's `group_add: ["2100"]` matches.
+  # Shared by acme and the Caddy container; GID matches compose `group_add: ["2100"]`.
   users.groups.caddy-certs.gid = 2100;
 
-  # Restart Caddy after each renewal so new cert files take effect
-  # (Caddy reads certs at startup, not on SIGHUP). If the container
-  # isn't up yet (first install, before `docker compose up -d`), this
-  # unit fails — resolve by starting Caddy and re-running nixos-rebuild.
-  # Post-install, a real failure here marks the unit failed and shows
-  # up in `systemctl --failed`; we'd otherwise silently serve stale
-  # certs for up to 30 days until the old one expired.
+  # Caddy reads certs only at startup, so restart it after each renewal.
   systemd.services.caddy-reload-certs = {
     description = "Restart Caddy after ACME cert renewal";
     serviceConfig = {
@@ -156,15 +116,10 @@ in
   # Cross-compile aarch64 (Pi backup host) from this x86_64 machine
   boot.binfmt.emulatedSystems = [ "aarch64-linux" ];
 
-  # Enable mdadm in initrd/services so the RAID 10 array (declared in
-  # ./disko.nix) assembles at boot. Per-partition kernel module list
-  # is in ./hardware-configuration.nix; fileSystems and swapDevices
-  # are generated by disko.
+  # Assembles the RAID 10 array from ./disko.nix at boot.
   boot.swraid.enable = true;
 
-  # Route mdadm array-failure events to ntfy home-smart (see mdadmAlert
-  # in the let block above). Without a MAILADDR or PROGRAM directive
-  # mdmon.service crashes at startup.
+  # Route mdadm array events to ntfy home-smart.
   boot.swraid.mdadmConf = ''
     PROGRAM ${mdadmAlert}/bin/mdadm-alert
   '';
@@ -172,10 +127,7 @@ in
   # ============================================================
   # Maintenance
   # ============================================================
-  # Monthly btrfs scrub catches bit-rot proactively; mdadm RAID 10
-  # provides the redundancy needed to repair detected errors on
-  # /mnt/data. Boot SSD has no redundancy — scrub still surfaces the
-  # bad block in the journal so it can be replaced.
+  # RAID 10 lets scrub repair /mnt/data; on the boot SSD it only reports errors.
   services.btrfs.autoScrub = {
     enable = true;
     interval = "monthly";
@@ -187,9 +139,6 @@ in
     "d /mnt/data/backups 0750 operator users - -"
   ];
 
-  # Garbage-collect old store paths weekly + hard-link duplicates so
-  # /nix/store doesn't grow unbounded. 30d keeps plenty of NixOS
-  # generations for rollback while reclaiming long-stale derivations.
   nix.gc = {
     automatic = true;
     dates = "weekly";
@@ -215,9 +164,7 @@ in
   users.users.operator = {
     isNormalUser = true;
     extraGroups = [ "wheel" "docker" ];
-    # Operator pubkey comes in as `operatorPubkeyPath` via specialArgs
-    # from flake.nix (declared as path input to /etc/nixos/operator.pub).
-    # Pure eval throughout; SSH works immediately after first boot.
+    # keys/operator.pub
     openssh.authorizedKeys.keyFiles = [ operatorPubkeyPath ];
     # Set password on first boot with: passwd operator
   };
@@ -235,8 +182,7 @@ in
     # Store Docker data on the RAID array, not the boot SSD
     daemon.settings = {
       data-root = "/mnt/data/docker";
-      # Cap container stdout per file (10MB × 3 = 30MB max per
-      # container) so a chatty service can't fill the data array.
+      # 10MB × 3 = 30MB max log per container.
       log-driver = "json-file";
       log-opts = {
         max-size = "10m";
@@ -283,7 +229,7 @@ in
     enable = true;
     allowedTCPPorts = [
       22      # SSH
-      53      # DNS (AdGuard Home) — reachable on tailnet + LAN
+      53      # DNS (AdGuard Home)
       80      # HTTP  (Caddy)
       443     # HTTPS (Caddy)
     ];
@@ -297,14 +243,9 @@ in
 
   # ============================================================
   # DNS + ad-blocking (AdGuard Home)
-  # Web UI bound to 127.0.0.1:3000, fronted by Caddy at
-  # `adguard.${DOMAIN}`. DNS listens on 0.0.0.0:53; the firewall
-  # above opens 53 for tailnet + LAN reach.
-  #
-  # mutableSettings = true: declarative config seeds the first run,
-  # the AdGuard setup wizard creates the admin user, and the web UI
-  # owns state thereafter. If you want to enforce declarative-only,
-  # flip to false and declare users + filters explicitly.
+  # Web UI on 127.0.0.1:3000 behind Caddy at `adguard.${DOMAIN}`;
+  # DNS on 0.0.0.0:53. With mutableSettings the web UI owns state after
+  # the first run.
   # ============================================================
   services.adguardhome = {
     enable = true;
@@ -316,22 +257,20 @@ in
       dns = {
         bind_hosts = [ "0.0.0.0" ];
         port = 53;
-        # Quad9 primary (adds malware-domain blocking), Cloudflare fallback.
-        # Both over DoT so AdGuard → upstream traffic is encrypted.
+        # Quad9 primary, Cloudflare fallback, both over DoT.
         upstream_dns = [
           "tls://dns.quad9.net"
           "tls://1.1.1.1"
         ];
         # Plaintext resolvers used to bootstrap the DoT hostnames above.
         bootstrap_dns = [ "9.9.9.9" "1.1.1.1" ];
-        # Reject DNS answers with invalid DNSSEC signatures (catches tampering).
         enable_dnssec = true;
       };
       filtering = {
         protection_enabled = true;
         filtering_enabled = true;
       };
-      # Leave blocklists empty — pick them in the setup wizard on first run.
+      # Blocklists are picked in the setup wizard.
       filters = [ ];
     };
   };
@@ -352,13 +291,9 @@ in
       extraBackupArgs = resticCommon.extraBackupArgs ++ [ "--tag" "seafile-data" ];
       backupCleanupCommand = "${ntfyNotify} home-backup 1 'Backup OK' 'seafile-data snapshot completed'";
     };
-    # AdGuard Home's state (admin user, selected blocklists, custom rules)
-    # lives outside /mnt/data because services.adguardhome uses DynamicUser
-    # + StateDirectory. `/var/lib/AdGuardHome` is a symlink into
-    # /var/lib/private/... ; restic follows the top-level symlink and
-    # captures the underlying files. Caveat: on restore, the dynamic UID
-    # of adguardhome may differ; a `systemctl stop adguardhome` +
-    # `chown -R` to the current owning UID may be needed before restart.
+    # /var/lib/AdGuardHome is a DynamicUser symlink into /var/lib/private;
+    # restic follows it. After a restore, stop adguardhome and `chown -R`
+    # the files to its current UID before starting it.
     adguard-state = resticCommon // {
       paths = [ "/var/lib/AdGuardHome" ];
       extraBackupArgs = resticCommon.extraBackupArgs ++ [ "--tag" "adguard-state" ];
@@ -366,8 +301,7 @@ in
     };
   };
 
-  # Wire each backup unit's failure path to the templated notifier from
-  # modules/alerts.nix.
+  # Failure notifier from modules/alerts.nix.
   systemd.services.restic-backups-docker-volumes.unitConfig.OnFailure =
     [ "ntfy-backup-failure@restic-backups-docker-volumes.service" ];
   systemd.services.restic-backups-seafile-data.unitConfig.OnFailure =
@@ -375,15 +309,8 @@ in
   systemd.services.restic-backups-adguard-state.unitConfig.OnFailure =
     [ "ntfy-backup-failure@restic-backups-adguard-state.service" ];
 
-  # Monthly deep integrity check. `restic check` runs after every backup
-  # and verifies structure/metadata; this timer additionally samples 10%
-  # of pack data (`--read-data-subset=10%`) and decrypts+rehashes it,
-  # catching bit-rot that the fast check can't. Over ~10 months the
-  # whole repo gets verified statistically.
-  #
-  # Bandwidth note: 10% flows over SFTP/Tailscale from main to the Pi.
-  # Fine on a LAN (Tailscale direct connect); if the Pi ever lives at a
-  # site with a slow uplink, dial the percentage down or go quarterly.
+  # Monthly deep check: reads and verifies a 10% sample of pack data over
+  # SFTP, covering the whole repo statistically over ~10 months.
   systemd.services.restic-check-deep = {
     description = "Deep restic repository check (--read-data-subset=10%)";
     path = [ pkgs.restic pkgs.openssh ];
@@ -402,7 +329,7 @@ in
     timerConfig = {
       OnCalendar = "monthly";        # first of every month
       Persistent = true;
-      RandomizedDelaySec = "6h";     # avoid pinning to 00:00 + don't collide with daily 03:00 backup
+      RandomizedDelaySec = "6h";     # clear of the 03:00 backup
     };
   };
 
@@ -417,9 +344,7 @@ in
     flags = [ "-L" ];
   };
 
-  # Only upgrade after both restic backup jobs succeeded today. The
-  # `requires` semantic means a failed restic (e.g. Pi unreachable)
-  # fails this unit too — no separate reachability check needed.
+  # Upgrade only after both restic jobs succeed.
   systemd.services.nixos-upgrade = {
     after = [
       "restic-backups-docker-volumes.service"

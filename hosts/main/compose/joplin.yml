@@ -44,10 +44,8 @@ services:
       retries: 3
       start_period: 30s
 
-  # One-shot init: rotates the upstream-default admin@localhost / admin
-  # password to JOPLIN_ADMIN_PASSWORD as soon as joplin is healthy.
-  # Closes the LAN-reachable default-creds window. Idempotent — on
-  # subsequent runs the default login fails, container exits 0.
+  # One-shot: replaces the default admin@localhost / admin password with
+  # JOPLIN_ADMIN_PASSWORD once joplin is healthy. Idempotent.
   joplin-init:
     image: alpine:3
     container_name: joplin-init

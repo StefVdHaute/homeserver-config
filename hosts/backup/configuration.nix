@@ -1,10 +1,7 @@
 # NixOS config for `backupserver` — Raspberry Pi 4 restic backup target.
 #
-# Security invariant: the restic password never lives on this host. All
-# operations that need the password (backup, prune, check, restore) run
-# from `homeserver` (main). A compromise of this Pi cannot decrypt backups.
-# Running other services here (Docker, edge-replicated services, etc.)
-# remains fine — they just must not touch the restic repo encryption keys.
+# The restic password never lives on this host; everything that needs it
+# runs from main. Nothing here may touch the restic repo encryption keys.
 
 { config, pkgs, ntfyNotify, operatorPubkeyPath, mainRootPubkeyPath, ... }:
 
@@ -15,28 +12,18 @@
     ../../modules/alerts.nix
   ];
 
-  # Operator alerts → main's ntfy, via tailnet Caddy. Base URL kept out of
-  # Nix (tailnet hostname is site-specific) and supplied by a one-line file.
+  # Operator alerts → main's ntfy; base URL comes from a one-line file.
   alerts.ntfy.urlFile = "/etc/ntfy/url";
   alerts.smartd = {
     enable = true;
     useDSat = true;   # USB-SATA bridge needs -d sat for SMART passthrough
-    # Explicit by-id list — DEVICESCAN can't scan with -d sat. Add the
-    # data drive's by-id here when it's provisioned.
+    # DEVICESCAN can't scan with -d sat, so drives are listed by-id.
     devices = [ "/dev/disk/by-id/usb-WDC_WDS2_40G2G0A-00JH30_0000000001A7-0:0" ];
   };
   alerts.tailscaleHealthcheck.enable = true;
 
   # ============================================================
-  # Swap — compressed in-RAM swap via zram. No disk wear, no btrfs-CoW
-  # gotcha that a swapfile on /mnt/backups would hit, and the Pi's
-  # workload (receiving SFTP pushes) rarely needs to swap out anyway.
-  # 50% of RAM as zstd-compressed swap gives effective ~100% RAM
-  # headroom on a Pi 4.
-  #
-  # Boot/bootloader wiring lives outside this file: extlinux + kernel
-  # from nixos-hardware.nixosModules.raspberry-pi-4, USB-boot chain in
-  # ./hardware-configuration.nix, OS disk layout in ./disko.nix.
+  # Swap — compressed in-RAM swap via zram
   # ============================================================
   zramSwap = {
     enable = true;
@@ -46,10 +33,8 @@
 
   # ============================================================
   # Storage — backup data drive
-  # Deliberately outside disko so no install/reinstall can ever format
-  # the restic repo; provisioning a fresh drive is a manual run of
-  # ./disko-data.nix. By-label mount keeps /dev/sdX enumeration (two
-  # USB drives) irrelevant.
+  # Outside disko so no install/reinstall can format the restic repo;
+  # provision a fresh drive with ./disko-data.nix.
   # ============================================================
   fileSystems."/mnt/backups" = {
     device = "/dev/disk/by-label/backup-data";
@@ -58,16 +43,13 @@
   };
 
   # ============================================================
-  # Docker — edge-replicated services / side projects. Data root lives
-  # on the @projects subvolume (mirrors main's data-root-off-the-OS
-  # pattern). Containers must never touch the restic repo or its keys —
-  # see the security invariant at the top of this file.
+  # Docker — edge-replicated services / side projects
   # ============================================================
   virtualisation.docker = {
     enable = true;
     daemon.settings = {
       data-root = "/srv/projects/docker";
-      # Same stdout caps as main — a chatty container can't fill the SSD.
+      # Caps container logs so they can't fill the SSD.
       log-driver = "json-file";
       log-opts = {
         max-size = "10m";
@@ -79,9 +61,7 @@
   # ============================================================
   # Maintenance
   # ============================================================
-  # Monthly btrfs scrub catches bit-rot proactively. Single-drive on
-  # both /, and (currently) /mnt/backups — scrub still surfaces bad
-  # blocks in the journal even without redundancy to repair from.
+  # Monthly btrfs scrub; with no redundancy it only reports bad blocks.
   services.btrfs.autoScrub = {
     enable = true;
     interval = "monthly";
@@ -111,25 +91,19 @@
   users.users.operator = {
     isNormalUser = true;
     extraGroups = [ "wheel" "docker" ];
-    # Operator pubkey comes in as `operatorPubkeyPath` via specialArgs
-    # from flake.nix (repo file keys/operator.pub). SSH works immediately
-    # after first boot. Mirrors main.
+    # keys/operator.pub, via flake specialArgs.
     openssh.authorizedKeys.keyFiles = [ operatorPubkeyPath ];
   };
 
-  # Dedicated user for restic SFTP pushes from main. SFTP via OpenSSH's
-  # sftp-server subsystem does NOT invoke the user's shell, so nologin
-  # is safe; keeps an attacker with main's root key from getting an
-  # interactive shell on the Pi.
+  # Restic SFTP target for main. sftp-server ignores the login shell, so
+  # nologin denies main's root key an interactive shell.
   users.users.restic = {
     isSystemUser = true;
     group = "restic";
     home = "/var/lib/restic";
     createHome = true;
     shell = "${pkgs.util-linux}/bin/nologin";
-    # main's root pubkey, matched by the private key encrypted into
-    # secrets/main-root-sshkey.age (which agenix decrypts onto main at
-    # /root/.ssh/id_ed25519). Pubkey is the repo file keys/main-root.pub.
+    # keys/main-root.pub; private half is secrets/main-root-sshkey.age.
     openssh.authorizedKeys.keyFiles = [ mainRootPubkeyPath ];
   };
   users.groups.restic = { };
@@ -175,7 +149,7 @@
   };
 
   # ============================================================
-  # Packages — minimal by default. Adding Docker etc. later is a one-liner.
+  # Packages
   # ============================================================
   # Baseline CLI tools come from modules/common.nix
   environment.systemPackages = with pkgs; [
@@ -187,8 +161,7 @@
 
   # ============================================================
   # Automatic Upgrades
-  # Runs daily at 05:30, but only when a recent restic snapshot has landed
-  # (proof that main is alive and the backup pipeline is working).
+  # Runs daily at 05:30, only when a recent restic snapshot has landed.
   # ============================================================
   system.autoUpgrade = {
     enable = true;
@@ -199,13 +172,10 @@
   };
 
   # Skip the upgrade if:
-  #   - the backup repo dir doesn't exist (first-install state; systemd's
-  #     ConditionPathIsDirectory skips the unit silently — the underlying
-  #     cause, a failed /mnt/backups mount, alerts separately via the
-  #     mnt-backups.mount OnFailure drop-in below), OR
-  #   - no fresh restic snapshot (<24h) — backup pipeline / main offline, OR
-  #   - main's ntfy /v1/health is unreachable — main is degraded; don't
-  #     follow it into brokenness.
+  #   - the backup repo dir doesn't exist (first install, or /mnt/backups
+  #     not mounted), OR
+  #   - no restic snapshot is newer than 24h, OR
+  #   - main's ntfy /v1/health is unreachable.
   systemd.services.nixos-upgrade = {
     unitConfig = {
       ConditionPathIsDirectory = "/mnt/backups/homeserver/snapshots";
@@ -237,9 +207,7 @@
   # The templated ntfy-infra-failure@.service lives in modules/alerts.nix.
   # ============================================================
 
-  # tailscaled daemon crash. Only catches the daemon process dying;
-  # "daemon up but tailnet unreachable" needs an active health check
-  # (tracked in TODO.md).
+  # tailscaled daemon crash.
   systemd.services.tailscaled.unitConfig.OnFailure =
     [ "ntfy-infra-failure@tailscaled.service" ];
 

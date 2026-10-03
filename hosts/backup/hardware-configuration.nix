@@ -1,14 +1,12 @@
-# Committed hand-authored hardware stub for `backupserver` (Pi 4, USB SSD
-# boot). Filesystems are owned by disko (./disko.nix); extlinux + kernel
-# defaults come from nixos-hardware.nixosModules.raspberry-pi-4. This file
-# carries the platform bits that make the EEPROM → start4.elf → U-Boot →
-# extlinux chain work from a USB drive.
+# Hand-authored hardware stub for `backupserver` (Pi 4, USB SSD boot via
+# EEPROM → start4.elf → U-Boot → extlinux). Filesystems come from
+# ./disko.nix; extlinux + kernel defaults from nixos-hardware's raspberry-pi-4.
 
 { config, lib, pkgs, ... }:
 
 let
-  # Boot-chain file set for the FAT /boot partition; mirrors nixpkgs'
-  # sd-image-aarch64.nix, trimmed to the Pi 4 parts.
+  # Boot-chain files for the FAT /boot partition (Pi 4 subset of nixpkgs'
+  # sd-image-aarch64.nix).
   configTxt = pkgs.writeText "config.txt" ''
     [pi4]
     kernel=u-boot-rpi4.bin
@@ -45,12 +43,7 @@ in
   boot.kernelModules = [ ];
   boot.extraModulePackages = [ ];
 
-  # Mainline kernel, not a downstream rpi one: linuxPackages_rpi4 is
-  # deprecated in nixpkgs 26.05 and no longer cached, and nixos-hardware's
-  # replacement builds from source — this host must never compile a kernel
-  # (the Pi's auto-upgrade builds its own closure natively). Mainline is
-  # channel-cached and covers everything this headless host uses
-  # (USB/PCIe/genet ethernet/btrfs); no HDMI/WiFi/BT/camera here.
+  # Mainline kernel: channel-cached, so the Pi never compiles one.
   boot.kernelPackages = pkgs.linuxPackages;
 
   # Serial console for headless boot debugging (enable_uart=1 in config.txt).
@@ -63,12 +56,11 @@ in
   # /boot is 1G FAT; each generation stages its kernel+initrd (~75MB).
   boot.loader.generic-extlinux-compatible.configurationLimit = 10;
 
-  # Wrap the stock extlinux installer so every bootloader install (first
-  # nixos-install AND each rebuild/auto-upgrade) also syncs Pi firmware +
-  # U-Boot into /boot. config.txt is Nix-owned — hand edits get clobbered.
+  # Every bootloader install (nixos-install, rebuilds, auto-upgrades) also
+  # syncs Pi firmware + U-Boot into /boot. config.txt is Nix-owned — hand
+  # edits get clobbered.
   system.build.installBootLoader = lib.mkForce (
-    # writeShellScript sets no PATH and switch-to-configuration runs this
-    # in a minimal systemd-run env — every command needs its store path.
+    # Runs with no PATH — every command needs its store path.
     pkgs.writeShellScript "install-rpi4-bootloader" ''
       set -euo pipefail
       ${config.boot.loader.generic-extlinux-compatible.populateCmd} -c "$1" -d /boot

@@ -1,13 +1,9 @@
 # =============================================================
 # Caddy Reverse Proxy Configuration
 #
-# Uses {$DOMAIN} from the environment. Expected shape:
-#   - Production: DOMAIN is a deSEC subdomain (e.g. home.dedyn.io)
-#     that matches site.acmeDomain in /etc/nixos/site.nix. Each site
-#     block imports the `acme_tls` snippet below, which points at the
-#     wildcard cert materialised by NixOS security.acme.
-#   - LAN-only fallback: set DOMAIN to homeserver.local and remove the
-#     `import acme_tls` lines; Caddy will fall back to its internal CA.
+# {$DOMAIN} must match site.acmeDomain in /etc/nixos/site.nix.
+# LAN-only: set DOMAIN=homeserver.local and remove the `import acme_tls`
+# lines; Caddy then uses its internal CA.
 # =============================================================
 
 # Wildcard cert for *.${DOMAIN}, issued + renewed by NixOS security.acme
@@ -16,9 +12,7 @@
 	tls /etc/caddy/certs/cert.pem /etc/caddy/certs/key.pem
 }
 
-# Defense-in-depth headers — imported by every vhost below. Covers the
-# authenticated-tailnet-peer-compromise case that tailnet-only access
-# alone doesn't.
+# Security headers, imported by every vhost below.
 (secure_headers) {
 	header {
 		Strict-Transport-Security "max-age=31536000"
@@ -52,10 +46,7 @@ joplin.{$DOMAIN} {
 	reverse_proxy joplin:22300
 }
 
-# Portainer — HTTP upstream over the private Docker `proxy` network.
-# The container exposes both 9000 (HTTP) and 9443 (self-signed HTTPS);
-# proxying over HTTPS with tls_insecure_skip_verify was unauthenticated
-# TLS (cert never verified), not real protection.
+# Portainer (HTTP over the private Docker `proxy` network)
 portainer.{$DOMAIN} {
 	import acme_tls
 	import secure_headers
@@ -76,9 +67,8 @@ ntfy.{$DOMAIN} {
 	reverse_proxy ntfy:80
 }
 
-# AdGuard Home admin UI (runs on the host as a NixOS service, not in
-# a container — reached via host.docker.internal; see extra_hosts in
-# hosts/main/compose/caddy.yml).
+# AdGuard Home admin UI on the host, via host.docker.internal
+# (extra_hosts in hosts/main/compose/caddy.yml).
 adguard.{$DOMAIN} {
 	import acme_tls
 	import secure_headers

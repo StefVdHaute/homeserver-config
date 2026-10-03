@@ -3,7 +3,7 @@
 #   nix-update --flake blender-mcp --version=stable
 #
 # The matching Blender add-on comes from the Blender Lab extensions repository
-# (https://lab.blender.org/), not from this package.
+# (https://lab.blender.org/).
 
 { lib
 , python3Packages

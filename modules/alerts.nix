@@ -1,10 +1,8 @@
 # Shared operator-alert plumbing: ntfy helper, smartd wiring, templated
-# failure notifiers. Imported by each host config; driven by options under
-# `alerts.*`. Keeps the per-host configuration.nix files free of duplicated
-# systemd unit bodies and shell-script literals.
+# failure notifiers, driven by options under `alerts.*`.
 #
-# Exposes `ntfyNotify` as a module arg so host configs can reuse it for
-# their own inline hooks (restic backupCleanupCommand, etc.).
+# Exposes `ntfyNotify` as a module arg for host configs' own hooks
+# (restic backupCleanupCommand, etc.).
 
 { config, lib, pkgs, ... }:
 
@@ -15,12 +13,8 @@ let
   hasUrlFile = cfg.ntfy.urlFile != null;
 
   # `ntfyNotify <topic> <priority> <title> <message>`
-  # The URL source is resolved at run time, not at eval time — either a
-  # literal Nix string (main: localhost) or a file read from disk (Pi:
-  # operator-managed /etc/ntfy/url). `tr -d '\n'` strips the trailing
-  # newline that `tee <<<` / heredocs / most editors add; otherwise the
-  # composed URL would contain an embedded \n and curl would reject it.
-  # writeShellApplication adds `set -euo pipefail` + shellcheck at build.
+  # The base URL is the `url` literal or read from `urlFile` at run time;
+  # `tr -d '\n'` strips the file's trailing newline, which curl rejects.
   ntfyNotifyPkg = pkgs.writeShellApplication {
     name = "ntfy-notify";
     runtimeInputs = [ pkgs.curl pkgs.coreutils ];
@@ -38,8 +32,6 @@ let
         "$base/$topic" >/dev/null
     '';
   };
-  # Keep `ntfyNotify` as a callable-path string so downstream callers
-  # (${ntfyNotify} ...) don't care about the migration.
   ntfyNotify = "${ntfyNotifyPkg}/bin/ntfy-notify";
 in
 
@@ -111,12 +103,11 @@ in
         }
       ];
 
-      # Expose the helper to host configs for inline use
-      # (restic backupCleanupCommand, host-specific OnFailure units, …).
+      # Expose the helper to host configs for inline use.
       _module.args.ntfyNotify = ntfyNotify;
 
-      # Templated failure notifiers — always defined when the module loads.
-      # Cheap to have idle; each host wires `OnFailure` → the one it needs.
+      # Templated failure notifiers; each host wires `OnFailure` → the one
+      # it needs.
       systemd.services."ntfy-backup-failure@" = {
         description = "Notify ntfy of failed backup unit %i";
         serviceConfig = {
@@ -178,9 +169,7 @@ in
           Type = "oneshot";
           ExecStart = "${tailscaleHealthcheck}/bin/tailscale-healthcheck";
         };
-        # If the script itself errors out before reaching ntfyNotify (e.g.
-        # `tailscale status --json` fails because the socket is unreachable
-        # but the daemon process is still running), OnFailure catches it.
+        # Catches the script failing before it reaches ntfyNotify.
         unitConfig.OnFailure = [ "ntfy-infra-failure@tailscale-healthcheck.service" ];
       };
       systemd.timers.tailscale-healthcheck = {

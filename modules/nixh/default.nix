@@ -1,5 +1,4 @@
-# NixOS module wrapper around ./package.nix. Thin on purpose — the tool itself
-# is a plain package so it stays buildable and testable outside a NixOS eval.
+# NixOS module wrapper around ./package.nix.
 
 { config, lib, pkgs, ... }:
 
@@ -31,8 +30,6 @@ in
 
     host = lib.mkOption {
       type = lib.types.str;
-      # hostName and the flake attribute are not the same string on two of
-      # three hosts, so this cannot just be networking.hostName.
       default = {
         homeserver = "main";
         backupserver = "backup";

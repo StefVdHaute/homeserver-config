@@ -1,12 +1,8 @@
-# nixh — a picker for the nix commands this repo actually needs.
+# nixh — a picker for the nix commands this repo needs. Every action is a
+# literal shell recipe; the picker previews it and running it evals the same
+# text. `nixh <verb>` skips the picker.
 #
-# Proof of concept. The point is not to hide nix: every action is stored as a
-# literal shell recipe, the picker previews that recipe, and running it evals
-# the same text you just read. What you see is what runs, so the tool teaches
-# itself out of a job — once you know a verb, `nixh <verb>` skips the picker.
-#
-# Kept separate from the module so it can be built (and shellchecked) on its
-# own: `nix build -f package.nix` with a host argument.
+# Builds on its own: `nix build -f package.nix` with a host argument.
 
 { lib
 , writeShellApplication
@@ -23,9 +19,7 @@
 
 let
   # Each recipe is the literal command text for one verb. Placeholders in
-  # <ANGLE_BRACKETS> are prompted for at run time. Multi-line recipes are
-  # deliberate: `bump` is four commands, and pretending otherwise is how you
-  # end up not knowing which step arms the fleet.
+  # <ANGLE_BRACKETS> are prompted for at run time.
   recipes = {
     check = ''
       nh os build --diff always <REFRESH>-H ${host} <EXTRA> <FLAKE>
@@ -78,8 +72,7 @@ let
     '';
   };
 
-  # Order is the order you meet them: look, act, move the fleet, then the
-  # recovery and housekeeping tail.
+  # Order: look, act, move the fleet, then recovery and housekeeping.
   menu = [
     { verb = "check";  blurb = "What would change on this machine, without touching it"; }
     { verb = "switch"; blurb = "Upgrade this machine now and make it the boot default"; }
@@ -94,17 +87,12 @@ let
     { verb = "find";   blurb = "Search nixpkgs for a package"; }
   ];
 
-  # Left-aligned columns. fixedWidthString pads on the left, which would glue
-  # the verb to its blurb and break fzf's {1} field along with it.
+  # Right-pads so the verb stays a separate fzf {1} field.
   padTo = width: s: s + lib.concatStrings (lib.genList (_: " ") (width - lib.stringLength s));
 
-  # Menu and every recipe in ONE derivation. A store path per verb (linkFarm +
-  # a writeText each) shows up as a separate line in every `nh` diff forever,
-  # and each new verb adds another. The text rides in as build-time env vars
-  # so no shell quoting or heredoc delimiter can be tripped by recipe content.
-  #
-  # The picker cats $RECIPES/<verb> for its preview and the runner reads the
-  # same file — one source of truth for the command text.
+  # Menu and every recipe in one derivation. The text rides in as build-time
+  # env vars so recipe content can't trip shell quoting. The picker preview
+  # and the runner both read $RECIPES/<verb>.
   data = runCommand "nixh-data"
     (lib.mapAttrs' (verb: text: lib.nameValuePair "recipe_${verb}" text) recipes // {
       menuText = lib.concatMapStrings (e: "${padTo 8 e.verb}${e.blurb}\n") menu;
@@ -137,16 +125,12 @@ writeShellApplication {
       sed 's/^/  /' "$MENU"
     }
 
-    # Fill the <PLACEHOLDER> tokens. Everything is prompted rather than
-    # flagged: the picker is interactive by definition, and a prompt with a
-    # visible default teaches the value a flag would have hidden.
+    # Fill the <PLACEHOLDER> tokens, prompting where no arg was given.
     resolve() {
       local recipe="$1" arg="''${2-}" extra="''${3-}" reply refresh
 
       # Pass-through flags (--impure, --show-trace, -L …). The token swallows
-      # the space after it, so the no-flags form has no double gap and needs
-      # no trailing-space trick in the value. Only the verbs that invoke nix,
-      # nh or nixos-rebuild carry <EXTRA>; commit and push deliberately do not.
+      # the space after it.
       if [[ -n $extra ]]; then
         recipe=''${recipe//"<EXTRA> "/"$extra "}
       else
@@ -158,13 +142,7 @@ writeShellApplication {
         [[ -n $reply ]] || read -r -p "flake [$FLAKE_DEFAULT]: " reply
         reply=''${reply:-$FLAKE_DEFAULT}
 
-        # --refresh only for remote refs. On a github: ref it busts nix's ~1h
-        # tarball cache so a rebuild right after a push sees the new commit.
-        # On a LOCAL flake it instead re-resolves every branch input and
-        # rewrites flake.lock — which silently rolls main and backup's pinned
-        # nixpkgs as a side effect of a read-only check. An existing directory
-        # means local, same test nixup uses to tell a path from a branch.
-        # Trailing space is inside the value so the flagless form has no gap.
+        # --refresh only for remote refs; an existing directory means local.
         if [[ -d $reply ]]; then refresh=""; else refresh="--refresh "; fi
 
         recipe=''${recipe//<REFRESH>/$refresh}
@@ -203,15 +181,13 @@ writeShellApplication {
 
       raw=$(cat "$RECIPES/$verb")
 
-      # commit, push, gens and roll carry no <EXTRA>. Say so rather than
-      # accept the flags and silently drop them.
       if [[ -n $extra && $raw != *"<EXTRA>"* ]]; then
         echo "nixh: $verb takes no extra flags — ignoring: $extra" >&2
       fi
 
       recipe=$(resolve "$raw" "$arg" "$extra")
 
-      # Show it before running it. This is the whole point of the tool.
+      # Show the recipe before running it.
       echo
       while IFS= read -r line; do
         printf '  $ %s\n' "$line"

@@ -1,15 +1,13 @@
-# Standalone layout for the external backup data drive. Deliberately NOT
-# imported by the flake — the restic repo must survive OS reinstalls, so
-# no automated install path may ever format this disk.
+# Layout for the external backup data drive. Not imported by the flake, so
+# no install path can format the restic repo.
 #
-# Run manually ONLY when provisioning a brand-new data drive, after
-# setting device= to the drive's by-id path (ls -l /dev/disk/by-id/):
+# Run manually ONLY to provision a brand-new data drive, after setting
+# device= to its by-id path (ls -l /dev/disk/by-id/):
 #
 #   sudo nix run --extra-experimental-features 'nix-command flakes' \
 #     github:nix-community/disko -- --mode destroy,format,mount ./disko-data.nix
 #
-# The runtime mount is declared in ./configuration.nix (by-label
-# "backup-data"), so enumeration and this file don't matter after format.
+# The runtime mount is in ./configuration.nix (by-label "backup-data").
 
 { ... }:
 

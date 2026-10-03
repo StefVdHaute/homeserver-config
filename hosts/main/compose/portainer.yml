@@ -3,10 +3,8 @@ services:
     image: portainer/portainer-ce:2.43.0
     container_name: portainer
     restart: unless-stopped
-    # Pre-set admin password via bcrypt hash so Portainer skips its
-    # first-run init wizard entirely. Closes the 5-minute window where
-    # any unauthenticated request to /api/users/admin/init can claim
-    # admin → docker.sock RW → host root.
+    # Skips the first-run wizard, whose open /api/users/admin/init lets
+    # anyone claim admin (docker.sock → host root).
     command: ["--admin-password=${PORTAINER_ADMIN_PASSWORD_HASH}"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

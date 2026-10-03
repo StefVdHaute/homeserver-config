@@ -4,9 +4,7 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
 
-    # Workstation tracks the rolling nixos-unstable branch; main and backup
-    # stay on the pinned 26.05 release. Only the workstation output builds
-    # against this input. `nix flake update nixpkgs-unstable` rolls it forward.
+    # Workstation only. Roll forward: `nix flake update nixpkgs-unstable`.
     nixpkgs-unstable.url = "github:NixOS/nixpkgs/nixos-unstable";
 
     disko = {
@@ -24,12 +22,8 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    # Operator-managed file, outside git (per-site domain/email stay out
-    # of the repo). flake.lock only *verifies* path inputs (narHash), it
-    # can't supply them — so this file must exist on any machine that
-    # evaluates the main host. main materializes it onto its own disk via
-    # environment.etc so on-device auto-upgrades keep working. Public
-    # keys used to be path inputs too; they live in ./keys now.
+    # Operator-managed, outside git. flake.lock only verifies path inputs, so
+    # this file must exist on any machine that evaluates the main host.
     site = {
       url = "path:/etc/nixos/site.nix";
       flake = false;
@@ -56,9 +50,6 @@
         ];
       };
 
-      # Pi has no repo-managed secrets (all its site-specific values
-      # are non-secret — URL, pubkey). Skip agenix here; re-add if the
-      # Pi ever gains a secret.
       backup = nixpkgs.lib.nixosSystem {
         inherit specialArgs;
         system = "aarch64-linux";
@@ -70,7 +61,6 @@
         ];
       };
 
-      # Rolling release: built from nixos-unstable, not the pinned 26.05.
       workstation = nixpkgs-unstable.lib.nixosSystem {
         inherit specialArgs;
         system = "x86_64-linux";
@@ -83,20 +73,13 @@
       };
     };
 
-    # nixh is deliberately standalone — it has no dependency on the rest of
-    # this flake, so it can be built, run or split into its own repo without
-    # touching a host config. Every host gets it via modules/common.nix; this
-    # output is for ad-hoc runs and for testing the package on its own.
+    # For ad-hoc runs; hosts get nixh via modules/common.nix.
     packages.x86_64-linux.nixh =
       nixpkgs-unstable.legacyPackages.x86_64-linux.callPackage ./modules/nixh/package.nix {
         host = "workstation";
       };
 
-    # spotify-adblock is built from source because nixpkgs does not carry it.
-    # Exposed as a package so nix-update can bump it against upstream's GitHub
-    # releases: `nix-update --flake spotify-adblock --version=stable` rewrites
-    # version, hash and cargoHash in the package file. The workstation
-    # consumes the same file via pkgs.callPackage.
+    # Exposed for `nix-update --flake spotify-adblock --version=stable`.
     packages.x86_64-linux.spotify-adblock =
       nixpkgs-unstable.legacyPackages.x86_64-linux.callPackage
         ./modules/spotify-adblock/package.nix { };

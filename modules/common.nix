@@ -1,14 +1,11 @@
-# Baseline shared by all hosts: the universal CLI tool belt. Anything
-# host-specific (mdadm, restic, desktop tools, …) stays in that host's
-# configuration.nix.
+# CLI tool belt shared by all hosts.
 
 { pkgs, ... }:
 
 {
   imports = [ ./nixh ];
 
-  # nixh carries its own deps (nh, fzf) in its wrapper, so enabling it here
-  # does not put them on anyone's PATH. Hosts override programs.nixh.repo.
+  # nh and fzf stay inside nixh's wrapper, off PATH.
   programs.nixh.enable = true;
 
   environment.systemPackages = with pkgs; [

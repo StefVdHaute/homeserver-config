@@ -1,23 +1,15 @@
 # spotify-adblock — an LD_PRELOAD shim that wraps getaddrinfo and
 # cef_urlrequest_create inside the Spotify client and drops every request
-# outside its allowlist. nixpkgs does not carry it (NixOS/nixpkgs#209784), so
-# it is built here from the upstream release tag — pure Rust, no native
-# dependencies.
+# outside its allowlist.
 #
-# Standalone on purpose, and exposed as a flake output, so nix-update can bump
-# it against upstream's GitHub releases:
+# Bump with (`nix flake update` never touches it):
 #
 #   nix-update --flake spotify-adblock --version=stable
 #
-# That reads the releases feed, then rewrites version, hash and cargoHash
-# below. Nothing else tracks this package — it is not a flake input, and
-# `nix flake update` never touches it.
-#
 # Config lookup is $XDG_CONFIG_HOME/spotify-adblock/config.toml if that file
-# exists, else /etc/spotify-adblock/config.toml. The crate is built with
-# `panic = "abort"`, so a missing config aborts Spotify itself rather than
-# degrading to no-op. Upstream's own list ships in share/spotify-adblock/ for
-# hosts to plant as the /etc fallback.
+# exists, else /etc/spotify-adblock/config.toml. A missing config aborts
+# Spotify. Upstream's list ships in share/spotify-adblock/ for hosts to plant
+# as the /etc fallback.
 
 { lib
 , rustPlatform

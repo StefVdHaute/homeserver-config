@@ -1,18 +1,14 @@
-# Declarative disk layout for `homeserver`. Realised by disko during
-# `nixos-anywhere` install (or `sudo disko --mode destroy,format,mount
-# <this-file>` from a running system).
+# Disk layout for `homeserver`, applied by `nixos-anywhere` (or
+# `sudo disko --mode destroy,format,mount <this-file>`).
 #
-# Replaces the imperative raid-setup.sh. Layout:
 #   /dev/sda       — 250GB boot SSD: ESP + 8GB swap + btrfs `@nixos`
 #                    subvolume mounted at /
 #   /dev/sdb..sde  — 4x 1TB spinners, each contributing one partition
 #                    to an mdadm RAID 10 array (md/raid10) holding btrfs
 #                    with the `@data` subvolume mounted at /mnt/data
 #
-# VERIFY WITH `lsblk` BEFORE RUNNING. If the server's device names
-# differ, adjust the `device =` lines below. Once disko has run, the
-# partitions have GPT partlabels ("nixos-boot" etc.) so subsequent
-# mounts don't depend on the sd* enumeration order staying stable.
+# VERIFY WITH `lsblk` BEFORE RUNNING and adjust the `device =` lines;
+# disko formats whatever they name. Mounts use GPT partlabels, not sd* names.
 
 { ... }:
 
