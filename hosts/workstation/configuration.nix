@@ -286,6 +286,9 @@ in
   # Read by the Stow-managed ~/.config/zsh/.zshrc.
   environment.variables.ZSH_PLUGIN_DIR = "${zshPluginDir}";
 
+  # theme-mode finds the Breeze colour schemes under /run/current-system/sw.
+  environment.pathsToLink = [ "/share/color-schemes" ];
+
   # RADV (Vulkan) ships inside mesa.
   hardware.graphics = {
     enable = true;
@@ -395,6 +398,7 @@ in
     adwaita-icon-theme       # real XCURSOR theme…
     defaultCursorTheme       # …plus the "default" name Wayland clients ask for
     gnome-themes-extra       # Adwaita-dark for GTK3 and Qt; gtk+3 ships neither
+    kdePackages.breeze       # Breeze{Dark,Light}.colors, which theme-mode merges into kdeglobals
 
     # Shell + CLI
     bash
