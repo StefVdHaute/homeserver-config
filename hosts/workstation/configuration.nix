@@ -46,17 +46,6 @@ let
       "--ozone-platform=wayland --enable-features=WaylandWindowDecorations --enable-wayland-ime=true";
   };
 
-  # Hyprland Lua-IPC dispatch backport for waybar 0.15.0; drop when nixpkgs
-  # ships waybar > 0.15.0. Both systemd.packages and systemPackages use it.
-  waybarLuaIpc =
-    if pkgs.waybar.version == "0.15.0" then
-      pkgs.waybar.overrideAttrs (old: {
-        patches = (old.patches or [ ]) ++ [ ./waybar-hyprland-lua-ipc.patch ];
-      })
-    else
-      lib.warn "waybar is ${pkgs.waybar.version}: the Hyprland Lua-IPC backport is obsolete, delete waybarLuaIpc and waybar-hyprland-lua-ipc.patch"
-        pkgs.waybar;
-
   # Install this, never plain pkgs.spotify: the .desktop Exec is PATH-relative.
   spotifyAdblocked = pkgs.symlinkJoin {
     name = "spotify-adblocked";
@@ -277,26 +266,22 @@ in
     };
   };
 
-  # The packages' own user units, started with the graphical session.
-  systemd.packages = with pkgs; [ mako waybarLuaIpc hypridle hyprpaper ];
+  # The packages' own user units, started with the graphical session. The
+  # Quickshell bar's unit is Stow-managed (~/.config/systemd/user) and enabled
+  # once with `systemctl --user enable --now quickshell.service`.
+  systemd.packages = with pkgs; [ mako hypridle hyprpaper ];
   systemd.user.services.mako.wantedBy = [ "graphical-session.target" ];
-  systemd.user.services.waybar.wantedBy = [ "graphical-session.target" ];
   systemd.user.services.hypridle.wantedBy = [ "graphical-session.target" ];
   systemd.user.services.hyprpaper.wantedBy = [ "graphical-session.target" ];
 
-  # PATH and TERMINAL for waybar's on-click launchers.
-  systemd.user.services.waybar.environment = {
-    TERMINAL = "alacritty";
-    PATH = lib.mkForce (lib.concatStringsSep ":" [
-      "/home/stef/.local/bin"
-      "/etc/profiles/per-user/stef/bin"
-      "/run/wrappers/bin"
-      "/run/current-system/sw/bin"
-    ]);
-  };
-
   hardware.bluetooth.enable = true;
   services.blueman.enable = true;
+
+  # The bar's mail widget: GOA holds the Google sign-in and keeps its tokens in
+  # gnome-keyring, which the login PAM stack (included by sddm) unlocks.
+  # pass-cli keeps its key there too.
+  services.gnome.gnome-online-accounts.enable = true;
+  services.gnome.gnome-keyring.enable = true;
 
   # Read by the Stow-managed ~/.config/zsh/.zshrc.
   environment.variables.ZSH_PLUGIN_DIR = "${zshPluginDir}";
@@ -386,7 +371,9 @@ in
   environment.systemPackages = with pkgs; [
     # Wayland desktop
     alacritty
-    waybarLuaIpc       # pkgs.waybar + the Hyprland Lua-IPC backport
+    quickshell         # the top bar; config and user unit are Stow-managed
+    libnotify          # notify-send, for the bar's and the bin/ scripts' toasts
+    gnome-online-accounts-gtk  # adds the Google account the bar's mail reads
     wofi
     mako
     hyprpaper
@@ -432,6 +419,8 @@ in
     cmake
     docker-compose
     claude-code
+    glab               # forge-status (the bar's code review): `glab auth login`
+    gh                 # forge-status: `gh auth login`
     jetbrains.clion
     jetbrains.pycharm
     jetbrains.rider
@@ -439,10 +428,11 @@ in
 
     # System tools
     sbctl              # inspect/verify the Secure Boot chain: sbctl status|verify
+    proton-pass-cli    # pass-cli, for agenda's url_command feeds
     nix-update         # bumps modules/spotify-adblock: nix-update --flake spotify-adblock --version=stable
     piper
     nvtopPackages.amd
-    pciutils           # lspci: friendly GPU names in waybar's custom/gpu tooltip
+    pciutils           # lspci: friendly GPU names in the bar's GPU tooltip
     gparted
     qdirstat
     xarchiver

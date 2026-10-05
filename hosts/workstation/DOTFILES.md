@@ -36,8 +36,21 @@ the login shell picks up `/etc/set-environment`.
 | `ZSH_PLUGIN_DIR` | `.zshrc` sources plugins from an Arch path. See below. |
 | `mako` | The dotfiles style mako and ship no dunst config. `dunst` was removed — it was inert. |
 | `adwaita-icon-theme` + a `default` cursor theme | `hypr/modules/env.lua` sets `XCURSOR_SIZE`/`HYPRCURSOR_SIZE` but no theme *name*. libwayland-cursor then asks for a theme literally called `default`, which otherwise doesn't exist, and Hyprland draws no pointer. |
-| `alacritty`, `firefox`, `thunar`, `wofi` | Exactly what `hypr/modules/programs.lua` names. `programs.lua` also exports `TERMINAL`/`BROWSER`, which waybar's `$TERMINAL -e htop` depends on. |
-| `waybar`, `hyprpaper`, `hypridle`, `hyprlock`, `cliphist`, `wl-clipboard`, `playerctl`, `pavucontrol`, `htop` | Referenced by the hypr and waybar configs. |
+| `alacritty`, `firefox`, `thunar`, `wofi` | Exactly what `hypr/modules/programs.lua` names. `programs.lua` also exports `TERMINAL`/`BROWSER`, which the bar's `$TERMINAL -e htop` depends on. |
+| `quickshell`, `hyprpaper`, `hypridle`, `hyprlock`, `cliphist`, `wl-clipboard`, `playerctl`, `pavucontrol`, `htop` | Referenced by the hypr and quickshell configs. |
+| `libnotify`, `glab`, `gh`, `proton-pass-cli`, GOA + `gnome-online-accounts-gtk`, gnome-keyring | The bar's widgets and their `bin/` backends (`agenda`, `forge-status`, `mail-status`); `quickshell/README.md` has the per-widget list. |
+
+### The Quickshell bar
+
+`quickshell.service` is a Stow-managed user unit, not a NixOS one; enable it
+once with `systemctl --user enable --now quickshell.service`. It starts
+`/usr/bin/env quickshell`: systemd resolves a bare `ExecStart` name only in
+`/usr/bin` and the like, and the user manager's PATH (which uwsm fills,
+`~/.local/bin` included) is what finds both quickshell and the `bin/` scripts
+the bar calls by name.
+
+Not on this host: the rig gateway (`system/README.md`). Its widget hides
+without a `rig-gateway` NM profile.
 
 ### The zsh plugin bridge
 
@@ -73,11 +86,8 @@ and NixOS adds that to `fpath` already.
 
 ## Still to resolve, dotfiles-side
 
-- **`blueberry` is gone from nixpkgs** (removed as unmaintained upstream, which
-  points at blueman). Waybar's bluetooth module is `"on-click": "blueberry"`
-  and the `blueberry/` Stow package exists only to suppress its tray
-  autostart. Both are dead on this host. Repoint the click at
-  `blueman-manager`; `services.blueman.enable` is on.
+- **`blueberry/`** only suppresses a tray applet nixpkgs no longer ships —
+  inert here. The bar's Bluetooth click opens `blueman-manager` when present.
 - **`yay/`** is an AUR helper config — inert on NixOS. Harmless, just noise.
 - **`fish/`** is stowed but fish is *not* installed here; the login shell is
   zsh. Either add `fish` to `systemPackages` or retire the package.
