@@ -517,6 +517,7 @@ in
     blenderMcp
     kicad
     openscad-unstable  # dev snapshot; the 2021.01 release lacks the Manifold backend
+    orca-slicer
     mpv
     qbittorrent
     gnome-calculator
