@@ -22,7 +22,7 @@ in
       type = lib.types.str;
       default = "$HOME/repositories/homeserver-config";
       description = ''
-        Local checkout that bump/commit/push operate on. Expanded by the
+        Local checkout that local/bump/commit/push operate on. Expanded by the
         shell at run time, so `$HOME` is fine here. Override per host — the
         servers keep theirs at `~/server_config`.
       '';

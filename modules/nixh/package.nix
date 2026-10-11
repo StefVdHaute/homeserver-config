@@ -29,6 +29,10 @@ let
       nh os switch --ask --diff always <REFRESH>-H ${host} <EXTRA> <FLAKE>
     '';
 
+    local = ''
+      nh os switch --ask --diff always -H ${host} <EXTRA> ${repo}
+    '';
+
     boot = ''
       nh os boot --ask --diff always <REFRESH>-H ${host} <EXTRA> <FLAKE>
     '';
@@ -76,6 +80,7 @@ let
   menu = [
     { verb = "check";  blurb = "What would change on this machine, without touching it"; }
     { verb = "switch"; blurb = "Upgrade this machine now and make it the boot default"; }
+    { verb = "local";  blurb = "Switch from the local checkout (git add new files first)"; }
     { verb = "boot";   blurb = "Stage the upgrade for the next boot instead"; }
     { verb = "bump";   blurb = "Roll the flake inputs and verify all three hosts still build"; }
     { verb = "commit"; blurb = "Commit the rolled flake.lock"; }
