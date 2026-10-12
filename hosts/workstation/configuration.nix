@@ -57,6 +57,17 @@ let
     '';
   };
 
+  # 2.4.2 segfaults rendering plate thumbnails on native Wayland. Drop this
+  # once nixpkgs ships a release with OrcaSlicer PR #15873.
+  orcaSlicerX11 = pkgs.symlinkJoin {
+    name = "orca-slicer-x11";
+    paths = [ pkgs.orca-slicer ];
+    nativeBuildInputs = [ pkgs.makeWrapper ];
+    postBuild = ''
+      wrapProgram $out/bin/orca-slicer --set GDK_BACKEND x11
+    '';
+  };
+
   gnomeKeyringUnlock = pkgs.writers.writePython3 "gnome-keyring-unlock" { }
     (builtins.readFile ./gnome-keyring-unlock.py);
 in
@@ -517,7 +528,7 @@ in
     blenderMcp
     kicad
     openscad-unstable  # dev snapshot; the 2021.01 release lacks the Manifold backend
-    orca-slicer
+    orcaSlicerX11
     mpv
     qbittorrent
     gnome-calculator
