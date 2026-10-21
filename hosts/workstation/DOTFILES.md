@@ -1,10 +1,11 @@
-# Dotfiles on NixOS (Stow, not home-manager)
+# Dotfiles on NixOS (Stow, moving to Home Manager)
 
-Interim arrangement for the workstation: `~/.dotfiles`
-([StefVdHaute/dotfiles](https://github.com/StefVdHaute/dotfiles)) stays
-GNU Stow-managed and remains the **source of truth for everything under `~`**.
-NixOS's job is only to provide what those dotfiles reference. Nothing here
-migrates config into Nix — that's the home-manager step, deliberately deferred.
+`~/.dotfiles` ([StefVdHaute/dotfiles](https://github.com/StefVdHaute/dotfiles))
+remains the **source of truth for everything under `~`**. Most of it is still
+GNU Stow-managed, and NixOS's job there is only to provide what those dotfiles
+reference. The configs moved off Stow are Home Manager modules in the repo's
+`home/` (its `home/README.md` lists them); `home.nix` imports them from the
+dotfiles flake, and the Arch install applies the same modules standalone.
 
 The rule that keeps this honest: **NixOS adapts to the dotfiles, never the
 other way round.** Where a dotfile genuinely cannot work unchanged, the fix
@@ -26,6 +27,39 @@ stow -t ~ */
 
 `stow` is in `environment.systemPackages`. Log out and back in afterwards so
 the login shell picks up `/etc/set-environment`.
+
+---
+
+## Home Manager
+
+`home-manager-stef.service` applies the dotfiles' `homeModules.default` on
+every switch. The dotfiles repo is private, so the flake fetches it over SSH
+with the key of whoever evaluates: `nixup` runs `nixos-rebuild --sudo`, which
+evaluates as stef and elevates only to activate. Stef's GitHub SSH key must
+work here (`ssh -T git@github.com`).
+
+The work email stays out of git, in a per-host `~/.config/git/private`
+(`[user]` / `email = ...`). A clone's own `user.email` would override the
+personal no-reply address, so leave none set.
+
+A config moving from Stow to Home Manager disappears from the
+Stow tree, so unstow it here **before** pulling the dotfiles commit that moves
+it: Stow finds its links through the package's files. For the first batch
+(fonts, git, ssh, tmux, and `systemd`'s `environment.d`):
+
+```sh
+cd ~/.dotfiles
+stow -t ~ -D git ssh tmux fontconfig systemd
+git pull
+stow -t ~ systemd     # its two units stay Stow-managed
+nixup                 # once homeserver-config locks the new dotfiles commit
+```
+
+A link missed here gets renamed to `*.pre-hm` rather than failing the switch
+(`backupFileExtension` in `home.nix`). Home Manager also writes
+`~/.config/systemd/user/tray.target`: if `~/.config/systemd` is itself a
+folded Stow link, that file would land inside the dotfiles repo, so check with
+`ls -ld ~/.config/systemd ~/.config/systemd/user` first.
 
 ---
 
@@ -89,8 +123,6 @@ and NixOS adds that to `fpath` already.
 - **`blueberry/`** only suppresses a tray applet nixpkgs no longer ships —
   inert here. The bar's Bluetooth click opens `blueman-manager` when present.
 - **`yay/`** is an AUR helper config — inert on NixOS. Harmless, just noise.
-- **`fish/`** is stowed but fish is *not* installed here; the login shell is
-  zsh. Either add `fish` to `systemPackages` or retire the package.
 - **`bin/.local/bin/`** scripts use `#!/usr/bin/env bash|python3`, which works
   on NixOS, but `wifi-menu` and `odoo-timesheet` haven't been exercised.
 
