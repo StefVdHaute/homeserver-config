@@ -42,6 +42,7 @@ system switch applies it through `home-manager-stef.service`.
 | `alacritty`, `firefox`, `thunar`, `wofi` | Exactly what `hypr/modules/programs.lua` names. `programs.lua` also exports `TERMINAL`/`BROWSER`, which the bar's `$TERMINAL -e htop` depends on. |
 | `quickshell`, `hyprpaper`, `hypridle`, `hyprlock`, `cliphist`, `wl-clipboard`, `playerctl`, `pavucontrol`, `htop` | Referenced by the hypr and quickshell configs. |
 | `libnotify`, `glab`, `gh`, `proton-pass-cli`, GOA + `gnome-online-accounts-gtk`, gnome-keyring | The bar's widgets and their `bin/` backends (`agenda`, `forge-status`, `mail-status`); `quickshell/README.md` has the per-widget list. |
+| `adwaita-fonts` | `fontconfig/fonts.conf` ranks Adwaita Mono for `monospace`, ahead of Noto Color Emoji, so UI symbols stay one colour. |
 
 ### The Quickshell bar
 

@@ -565,6 +565,7 @@ in
   fonts.packages = with pkgs; [
     noto-fonts
     noto-fonts-color-emoji
+    adwaita-fonts  # Adwaita Mono, ranked for monospace by the dotfiles' fonts.conf
     nerd-fonts.jetbrains-mono
     nerd-fonts.fira-code
   ];
