@@ -47,13 +47,16 @@ let
   };
 
   # Install this, never plain pkgs.spotify: the .desktop Exec is PATH-relative.
+  # Runs natively on Wayland, so Hyprland's fractional scale applies; the
+  # flags match the dotfiles' spotify-flags.conf, which only Arch's launcher reads.
   spotifyAdblocked = pkgs.symlinkJoin {
     name = "spotify-adblocked";
     paths = [ pkgs.spotify ];
     nativeBuildInputs = [ pkgs.makeWrapper ];
     postBuild = ''
       wrapProgram $out/bin/spotify \
-        --set LD_PRELOAD ${spotifyAdblock}/lib/libspotifyadblock.so
+        --set LD_PRELOAD ${spotifyAdblock}/lib/libspotifyadblock.so \
+        --add-flags "--enable-features=UseOzonePlatform --ozone-platform=wayland"
     '';
   };
 

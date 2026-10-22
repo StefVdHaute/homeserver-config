@@ -43,6 +43,7 @@ system switch applies it through `home-manager-stef.service`.
 | `quickshell`, `hyprpaper`, `hypridle`, `hyprlock`, `cliphist`, `wl-clipboard`, `playerctl`, `pavucontrol`, `htop` | Referenced by the hypr and quickshell configs. |
 | `libnotify`, `glab`, `gh`, `proton-pass-cli`, GOA + `gnome-online-accounts-gtk`, gnome-keyring | The bar's widgets and their `bin/` backends (`agenda`, `forge-status`, `mail-status`); `quickshell/README.md` has the per-widget list. |
 | `adwaita-fonts` | `fontconfig/fonts.conf` ranks Adwaita Mono for `monospace`, ahead of Noto Color Emoji, so UI symbols stay one colour. |
+| Wayland flags in the `spotifyAdblocked` wrapper | `spotify/.config/spotify-flags.conf` is read only by Arch's `/usr/bin/spotify` launcher. The wrapper passes the same flags. |
 
 ### The Quickshell bar
 
