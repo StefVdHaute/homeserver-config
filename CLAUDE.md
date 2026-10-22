@@ -28,7 +28,7 @@ This file is the single source of truth for architecture, decisions, and the beh
 - **Hardware:** Framework 16 with Ryzen 7000-series, 32GB RAM. Single NVMe (`/dev/nvme1n1`) — installed alongside an existing OS on a separate drive (dual-boot via UEFI menu, separate ESPs, no shared bootloader).
 - **Storage:** LUKS-encrypted btrfs `@nixos` subvolume at `/`. Boot SSD has its own ESP partition.
 - **Role:** Daily driver for the operator. Runs Hyprland (Wayland tiling compositor), Tailscale leaf, no service-hosting role. Holds the workstation-side operator key + host keys for managing main/Pi.
-- **Out of scope here:** user dotfiles (Hyprland config, shell rc, etc.) — those stay under GNU Stow at `~/.dotfiles`, not Nix-managed.
+- **Out of scope here:** user dotfiles (Hyprland config, shell rc, etc.) — those stay under GNU Stow at `~/.dotfiles`. The exception is the dotfiles flake's `home/` modules (fonts, git, ssh, tmux, user session variables): the `dotfiles` input's `homeModules.default`, applied for `stef` by the Home Manager NixOS module. See `hosts/workstation/DOTFILES.md`.
 - **Config:** `hosts/workstation/`
 
 ---
@@ -215,7 +215,7 @@ The deploy playbook's secrets-inventory section calls this out at install time �
 
 | File | Purpose |
 |---|---|
-| `flake.nix` | Pinned `nixos-26.05` nixpkgs (main/backup) + rolling `nixpkgs-unstable` (workstation); `nixosConfigurations.main` / `.backup` / `.workstation` |
+| `flake.nix` | Pinned `nixos-26.05` nixpkgs (main/backup) + rolling `nixpkgs-unstable`, `home-manager` and `dotfiles` (workstation); `nixosConfigurations.main` / `.backup` / `.workstation` |
 | `keys/*.pub` | Public keys distributed via git: operator SSH key + main's root key (restic SFTP identity) |
 | `README.md` | Top-level index for both hosts |
 | `CLAUDE.md` | This file — architecture + decisions |

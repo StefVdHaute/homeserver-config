@@ -1,10 +1,12 @@
-# Dotfiles on NixOS (Stow, not home-manager)
+# Dotfiles on NixOS (Stow, plus Home Manager for `home/`)
 
-Interim arrangement for the workstation: `~/.dotfiles`
-([StefVdHaute/dotfiles](https://github.com/StefVdHaute/dotfiles)) stays
-GNU Stow-managed and remains the **source of truth for everything under `~`**.
-NixOS's job is only to provide what those dotfiles reference. Nothing here
-migrates config into Nix — that's the home-manager step, deliberately deferred.
+`~/.dotfiles` ([StefVdHaute/dotfiles](https://github.com/StefVdHaute/dotfiles))
+is the **source of truth for everything under `~`**. Most of it is GNU
+Stow-managed, and NixOS provides what those configs reference. The repo's
+`home/` directory holds Home Manager modules instead (fonts, git, ssh, tmux,
+user session variables): `flake.nix` takes the repo as the `dotfiles` input,
+and `configuration.nix` applies its `homeModules.default` for `stef`. Roll it
+forward after a dotfiles push with `nix flake update dotfiles`.
 
 The rule that keeps this honest: **NixOS adapts to the dotfiles, never the
 other way round.** Where a dotfile genuinely cannot work unchanged, the fix
@@ -25,7 +27,8 @@ stow -t ~ */
 ```
 
 `stow` is in `environment.systemPackages`. Log out and back in afterwards so
-the login shell picks up `/etc/set-environment`.
+the login shell picks up `/etc/set-environment`. `stow */` skips `home/`; the
+system switch applies it through `home-manager-stef.service`.
 
 ---
 

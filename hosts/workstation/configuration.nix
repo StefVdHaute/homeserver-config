@@ -1,4 +1,4 @@
-{ config, lib, pkgs, operatorPubkeyPath, ... }:
+{ config, lib, pkgs, operatorPubkeyPath, dotfiles, ... }:
 
 let
   # The zsh plugins in Arch's /usr/share/zsh/plugins/<name>/ layout, for the
@@ -154,6 +154,18 @@ in
     extraGroups = [ "wheel" "networkmanager" "video" "audio" "input" "docker" "gamemode" ];
     shell = pkgs.zsh;
     openssh.authorizedKeys.keyFiles = [ operatorPubkeyPath ];
+  };
+
+  # The dotfiles' home/ modules (fonts, git, ssh, tmux, user session
+  # variables); the rest of ~ stays Stow-managed. Activation fails on a file
+  # it does not own: `stow -D` a moved package before the switch.
+  home-manager = {
+    useGlobalPkgs = true;
+    useUserPackages = true;
+    users.stef = {
+      imports = [ dotfiles.homeModules.default ];
+      home.stateVersion = "26.05";
+    };
   };
 
   # Makes the root-owned @games subvolume writable by stef.
