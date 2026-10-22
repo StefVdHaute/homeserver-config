@@ -89,8 +89,6 @@ and NixOS adds that to `fpath` already.
 - **`blueberry/`** only suppresses a tray applet nixpkgs no longer ships —
   inert here. The bar's Bluetooth click opens `blueman-manager` when present.
 - **`yay/`** is an AUR helper config — inert on NixOS. Harmless, just noise.
-- **`fish/`** is stowed but fish is *not* installed here; the login shell is
-  zsh. Either add `fish` to `systemPackages` or retire the package.
 - **`bin/.local/bin/`** scripts use `#!/usr/bin/env bash|python3`, which works
   on NixOS, but `wifi-menu` and `odoo-timesheet` haven't been exercised.
 
