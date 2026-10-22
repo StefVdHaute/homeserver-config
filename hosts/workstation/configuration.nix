@@ -529,6 +529,7 @@ in
     kicad
     openscad-unstable  # dev snapshot; the 2021.01 release lacks the Manifold backend
     orcaSlicerX11
+    freecad
     mpv
     qbittorrent
     gnome-calculator
