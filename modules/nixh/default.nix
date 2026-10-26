@@ -11,7 +11,7 @@ in
 
     flake = lib.mkOption {
       type = lib.types.str;
-      default = "github:StefVdHaute/homeserver-config";
+      default = "git+https://github.com/StefVdHaute/homeserver-config";
       description = ''
         Default flake reference for check/switch/boot. Pass a path as the
         argument (`nixh switch .`) to build from a local checkout instead.

@@ -13,7 +13,7 @@
 , nix
 , coreutils
 , host
-, flake ? "github:StefVdHaute/homeserver-config"
+, flake ? "git+https://github.com/StefVdHaute/homeserver-config"
 , repo ? "$HOME/repositories/homeserver-config"
 }:
 
