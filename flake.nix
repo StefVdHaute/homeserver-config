@@ -1,5 +1,5 @@
 {
-  description = "Home server config — main (x86_64 homeserver) + backup (aarch64 Raspberry Pi)";
+  description = "Home server config — main (x86_64 homeserver) + backup (aarch64 Raspberry Pi) + workstation (x86_64 Framework 16)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";

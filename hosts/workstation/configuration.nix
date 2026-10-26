@@ -73,7 +73,10 @@ in
   #
   # secureBoot signs with the sbctl keys Arch already enrolled (/var/lib/sbctl).
   # autoGenerateKeys must stay false: new keys replace the enrolled db and
-  # Arch stops booting.
+  # Arch stops booting. The same goes for `sbctl create-keys`, `setup` and
+  # `enroll-keys`, and for clearing Secure Boot in the firmware. A reinstall
+  # copies /var/lib/sbctl to /mnt/var/lib/sbctl before nixos-install; the
+  # Limine installer exits without it.
   boot.loader.efi.canTouchEfiVariables = true;
   boot.loader.timeout = 3;
   boot.loader.limine = {
@@ -137,8 +140,9 @@ in
     memoryPercent = 50;
   };
 
-  # Password is set imperatively before first reboot
-  # (`nixos-enter --root /mnt -- passwd stef`); without it first boot locks out.
+  # Password is set imperatively before first reboot; without it first boot
+  # locks out. nixos-enter keeps the host's PATH, so passwd needs its full path:
+  #   nixos-enter --root /mnt -c '/nix/var/nix/profiles/system/sw/bin/passwd stef'
   users.mutableUsers = true;
 
   users.users.stef = {

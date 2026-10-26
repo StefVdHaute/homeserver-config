@@ -25,8 +25,8 @@ This file is the single source of truth for architecture, decisions, and the beh
 
 ### `workstation` (operator's daily driver)
 
-- **Hardware:** Framework 16 with Ryzen 7000-series, 32GB RAM. Single NVMe (`/dev/nvme1n1`) — installed alongside an existing OS on a separate drive (dual-boot via UEFI menu, separate ESPs, no shared bootloader).
-- **Storage:** LUKS-encrypted btrfs `@nixos` subvolume at `/`. Boot SSD has its own ESP partition.
+- **Hardware:** Framework 16 with Ryzen 7000-series, 32GB RAM. NixOS has its own 2TB NVMe (addressed by `/dev/disk/by-id/`); Arch stays on the other NVMe. Separate ESPs: Limine on the NixOS ESP lists both systems and chainloads Arch's signed UKI, with Secure Boot on Arch's existing sbctl keys.
+- **Storage:** LUKS-encrypted btrfs with `@nixos` at `/`, `@home`, `@log` at `/var/log`, `@games` at `/home/stef/Games`, and `@swap` holding the 40G hibernate swapfile.
 - **Role:** Daily driver for the operator. Runs Hyprland (Wayland tiling compositor), Tailscale leaf, no service-hosting role. Holds the workstation-side operator key + host keys for managing main/Pi.
 - **Out of scope here:** user dotfiles (Hyprland config, shell rc, etc.) — those stay under GNU Stow at `~/.dotfiles`. The exception is the dotfiles flake's `home/` modules (fonts, git, ssh, tmux, user session variables): the `dotfiles` input's `homeModules.default`, applied for `stef` by the Home Manager NixOS module. See `hosts/workstation/DOTFILES.md`.
 - **Config:** `hosts/workstation/`
@@ -176,7 +176,7 @@ Two categories:
 
 ## Disaster recovery
 
-`secrets/restic.env.age` (and every other `.age` file) is encrypted to **two recipients**: main's SSH host pubkey, and the operator's workstation pubkey (read from `/etc/nixos/operator.pub`). Either private key is sufficient to decrypt — survival of one means survival of the backup.
+`secrets/restic.env.age` (and every other `.age` file) is encrypted to **two recipients**: main's SSH host pubkey, and the operator's workstation pubkey (`keys/operator.pub`). Either private key is sufficient to decrypt — survival of one means survival of the backup.
 
 ### Main loss (Pi + workstation intact)
 
@@ -238,7 +238,7 @@ The deploy playbook's secrets-inventory section calls this out at install time �
 | `hosts/backup/hardware-configuration.nix` | Hand-authored platform stub: USB-root initrd modules (xhci/uas/sd), mainline kernel pin (channel-cached — no kernel compiles on Pi or workstation), serial consoles, `installBootLoader` wrapper syncing Pi firmware + U-Boot into `/boot` |
 | `hosts/backup/README.md` | Pi backup-host setup guide |
 | `hosts/workstation/configuration.nix` | Workstation NixOS config (Hyprland, PipeWire, greetd/tuigreet, Tailscale leaf, no service-hosting) |
-| `hosts/workstation/disko.nix` | Declarative disk layout: ESP + LUKS-encrypted btrfs `@nixos` on `/dev/nvme1n1` |
+| `hosts/workstation/disko.nix` | Declarative disk layout: ESP + LUKS-encrypted btrfs subvolumes on the NixOS NVMe, addressed by `/dev/disk/by-id/` |
 | `hosts/workstation/hardware-configuration.nix` | Hand-authored platform stub: AMD CPU + NVMe initrd modules; Framework 16-specific bits come from `nixos-hardware.nixosModules.framework-16-7040-amd` |
 
 ---
