@@ -27,7 +27,7 @@ python3Packages.buildPythonApplication rec {
 
   dependencies = with python3Packages; [
     docutils
-    mcp
+    mcp_1
     pyyaml
   ];
 
