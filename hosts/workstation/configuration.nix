@@ -60,17 +60,6 @@ let
     '';
   };
 
-  # 2.4.2 segfaults rendering plate thumbnails on native Wayland. Drop this
-  # once nixpkgs ships a release with OrcaSlicer PR #15873.
-  orcaSlicerX11 = pkgs.symlinkJoin {
-    name = "orca-slicer-x11";
-    paths = [ pkgs.orca-slicer ];
-    nativeBuildInputs = [ pkgs.makeWrapper ];
-    postBuild = ''
-      wrapProgram $out/bin/orca-slicer --set GDK_BACKEND x11
-    '';
-  };
-
   gnomeKeyringUnlock = pkgs.writers.writePython3 "gnome-keyring-unlock" { }
     (builtins.readFile ./gnome-keyring-unlock.py);
 in
@@ -184,7 +173,6 @@ in
     enable = true;
     withUWSM = true;
   };
-  programs.uwsm.enable = true;
   programs.hyprlock.enable = true;   # also registers the hyprlock PAM service
   programs.zsh.enable = true;
 
@@ -229,24 +217,6 @@ in
 
   # Games opt in with the Steam launch option `gamemoderun %command%`.
   programs.gamemode.enable = true;
-
-  # Lets the gamemode group run gamemode's polkit helper actions without a prompt.
-  security.polkit.extraConfig = ''
-    polkit.addRule(function(action, subject) {
-      if (action.id.indexOf("com.feralinteractive.GameMode.") == 0 &&
-          subject.isInGroup("gamemode")) {
-        return polkit.Result.YES;
-      }
-    });
-  '';
-
-  xdg.portal = {
-    enable = true;
-    extraPortals = [
-      pkgs.xdg-desktop-portal-hyprland
-      pkgs.xdg-desktop-portal-gtk
-    ];
-  };
 
   # Opens text files in nvim; xdg-terminal-exec in systemPackages supplies
   # the terminal nvim.desktop (Terminal=true) needs.
@@ -378,12 +348,6 @@ in
   # theme-mode finds the Breeze colour schemes under /run/current-system/sw.
   environment.pathsToLink = [ "/share/color-schemes" ];
 
-  # RADV (Vulkan) ships inside mesa.
-  hardware.graphics = {
-    enable = true;
-    enable32Bit = true;
-  };
-
   services.fwupd.enable = true;
   services.fprintd.enable = true;
   services.ratbagd.enable = true;   # piper is its GUI
@@ -490,7 +454,6 @@ in
     kdePackages.breeze       # Breeze{Dark,Light}.colors, which theme-mode merges into kdeglobals
 
     # Shell + CLI
-    bash
     python3           # interpreter for Claude Code plugin hooks (hookify)
     neovim            # plugins come from the Stow-managed ~/.config/nvim
     stow
@@ -510,7 +473,6 @@ in
 
     # Development
     cmake
-    docker-compose
     claude-code
     glab               # forge-status (the bar's code review): `glab auth login`
     gh                 # forge-status: `gh auth login`
@@ -543,7 +505,7 @@ in
     blenderMcp
     kicad
     openscad-unstable  # dev snapshot; the 2021.01 release lacks the Manifold backend
-    orcaSlicerX11
+    orca-slicer
     freecad
     mpv
     qbittorrent
