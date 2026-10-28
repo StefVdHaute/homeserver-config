@@ -521,6 +521,8 @@ in
   environment.etc."spotify-adblock/config.toml".source =
     "${spotifyAdblock}/share/spotify-adblock/config.toml";
 
+  environment.etc."mpv/mpv.conf".text = "hwdec=auto-safe\n";   # mpv defaults to CPU decoding
+
   # The MCP add-on appears as a read-only System extension; enable it once in
   # Preferences, with "Allow Online Access" on.
   environment.sessionVariables.BLENDER_SYSTEM_EXTENSIONS =
