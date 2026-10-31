@@ -105,6 +105,9 @@ in
   # `btrfs inspect-internal map-swapfile -r /swap/swapfile`.
   boot.kernelParams = [ "resume_offset=533760" ];
 
+  # Power off after the image write, without the ACPI S4 platform hooks.
+  systemd.sleep.settings.Sleep.HibernateMode = "shutdown";
+
   boot.kernelPackages = pkgs.linuxPackages_latest;
 
   # The nixpkgs default kernel as a fallback boot entry.
