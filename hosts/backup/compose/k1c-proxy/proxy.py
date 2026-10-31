@@ -25,7 +25,7 @@ SESSION = web.AppKey("session", ClientSession)
 HOP_HEADERS = {"host", "connection", "keep-alive", "transfer-encoding", "upgrade",
                "content-length", "content-encoding"}
 WEBCAM_DEFAULTS = {
-    "location": "printer", "service": "mjpegstreamer", "enabled": True, "icon": "mdiWebcam",
+    "location": "printer", "service": "iframe", "enabled": True, "icon": "mdiWebcam",
     "target_fps": 15, "target_fps_idle": 5, "stream_url": "", "snapshot_url": "",
     "flip_horizontal": False, "flip_vertical": False, "rotation": 0,
     "aspect_ratio": "4:3", "extra_data": {}, "source": "database",
@@ -38,7 +38,7 @@ def save_webcams(webcams):
 
 def load_webcams():
     if not STORE.exists():
-        save_webcams([{**WEBCAM_DEFAULTS, "name": "K1C", "stream_url": "/webcam/stream.mjpeg",
+        save_webcams([{**WEBCAM_DEFAULTS, "name": "K1C", "stream_url": "/webcam/",
                        "snapshot_url": "/webcam/snapshot.jpg", "aspect_ratio": "16:9",
                        "uid": str(uuid.uuid4())}])
     return json.loads(STORE.read_text())

@@ -240,7 +240,7 @@ The deploy playbook's secrets-inventory section calls this out at install time â
 | `hosts/backup/compose/fluidd.yml` | Fluidd (port 8080) + `k1c-proxy` (port 7125) + go2rtc (camera as MJPEG) for the Creality K1C |
 | `hosts/backup/compose/k1c-proxy/` | Moonraker proxy that adds what the K1C stock API lacks (webcams, `server.database.list`); also relays the camera's WebRTC offer and corrects the answer for go2rtc |
 | `hosts/backup/compose/go2rtc.yaml` | go2rtc stream `k1c`: WebRTC through `k1c-proxy`, transcoded to 720p MJPEG |
-| `hosts/backup/compose/fluidd-nginx.conf.template` | Fluidd's nginx template plus `/webcam/stream.mjpeg` and `/webcam/snapshot.jpg` to go2rtc (the rest of the go2rtc API stays closed) |
+| `hosts/backup/compose/fluidd-nginx.conf.template` | Fluidd's nginx template plus the `/webcam/` page for the Fluidd iframe camera, and `/webcam/stream.mjpeg` and `/webcam/snapshot.jpg` to go2rtc (the rest of the go2rtc API stays closed) |
 | `hosts/backup/README.md` | Pi backup-host setup guide |
 | `hosts/workstation/configuration.nix` | Workstation NixOS config (Hyprland, PipeWire, greetd/tuigreet, Tailscale leaf, no service-hosting) |
 | `hosts/workstation/disko.nix` | Declarative disk layout: ESP + LUKS-encrypted btrfs subvolumes on the NixOS NVMe, addressed by `/dev/disk/by-id/` |

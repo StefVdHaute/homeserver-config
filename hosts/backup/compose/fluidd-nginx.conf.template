@@ -42,6 +42,13 @@ server {
   resolver 127.0.0.11 valid=30s;
   set $go2rtc go2rtc:1984;
 
+  # Page for the Fluidd iframe camera. WebKitGTK (the OrcaSlicer Device tab)
+  # plays MJPEG in an <img>, but not in Fluidd's fetch-based MJPEG reader.
+  location = /webcam/ {
+    default_type text/html;
+    return 200 '<!doctype html><style>html,body{margin:0;height:100%;background:#000}img{display:block;width:100%;height:100%;object-fit:contain}</style><img src="stream.mjpeg" alt="">';
+  }
+
   location = /webcam/stream.mjpeg {
     proxy_pass http://$go2rtc/api/stream.mjpeg?src=k1c;
     proxy_buffering off;

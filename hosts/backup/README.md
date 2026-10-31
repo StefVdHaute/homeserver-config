@@ -119,7 +119,7 @@ ssh operator@backupserver.<your-tailnet>.ts.net \
 
 ## 8. Fluidd for the Creality K1C
 
-`compose/fluidd.yml` runs Fluidd, `k1c-proxy` (see `k1c-proxy/proxy.py`) and go2rtc. go2rtc turns the WebRTC camera into MJPEG at `/webcam/stream.mjpeg`, so web views without WebRTC (OrcaSlicer on Linux) show it too.
+`compose/fluidd.yml` runs Fluidd, `k1c-proxy` (see `k1c-proxy/proxy.py`) and go2rtc. go2rtc turns the WebRTC camera into MJPEG at `/webcam/stream.mjpeg`, so web views without WebRTC (OrcaSlicer on Linux) show it too. The Fluidd camera is an `iframe` on `/webcam/`, a page that shows the stream in an `<img>`.
 
 ```bash
 cd ~ && git clone <your-repo-url> server_config && cd server_config/hosts/backup
