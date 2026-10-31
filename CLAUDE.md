@@ -20,7 +20,8 @@ This file is the single source of truth for architecture, decisions, and the beh
 
 - **Hardware:** Raspberry Pi 4, no SD card — boots from a ~240GB SATA SSD in a USB adapter via EEPROM USB boot (GPT; needs bootloader ≥ 2020-10-28). OS SSD carries btrfs `@nixos` at `/` plus `@projects` at `/srv/projects` for side projects, and a 1G FAT32 `/boot` holding the whole boot chain (Pi firmware + U-Boot + extlinux + kernels — U-Boot can't read into btrfs subvolumes). Second external USB SSD on btrfs holds backup data (single drive now; btrfs RAID 1 conversion path reserved for when a second drive is added). The data drive is excluded from disko so no reinstall can format the restic repo.
 - **Role:** Receives restic backups from `homeserver` over SSH/SFTP via Tailscale. Does not hold the restic password (encryption keys stay on main so a Pi compromise cannot decrypt backups).
-- **Edge services:** Docker is enabled (data root `/srv/projects/docker` on the `@projects` subvolume — the data drive stays restic-only) for edge-replicated services at the Pi's location (slow uplink at that site — edge replicas avoid re-pulling over the link). No compose files yet.
+- **Edge services:** Docker is enabled (data root `/srv/projects/docker` on the `@projects` subvolume — the data drive stays restic-only) for edge-replicated services at the Pi's location (slow uplink at that site — edge replicas avoid re-pulling over the link). Compose files live in `hosts/backup/compose/` (Fluidd for the Creality K1C printer).
+- **Firewall:** trusts `tailscale0`, the IPv4 LAN (`192.168.128.0/23`) and IPv6 link-local (`fe80::/10`) on `end0`; drops everything else. The LAN rules match source addresses, not the interface, because `end0` also carries public IPv6. The link-local rule is limited to `end0` because Docker bridges also have link-local addresses.
 - **Config:** `hosts/backup/`
 
 ### `workstation` (operator's daily driver)
@@ -236,6 +237,8 @@ The deploy playbook's secrets-inventory section calls this out at install time �
 | `hosts/backup/disko.nix` | Declarative disk layout, OS SSD only: 1G FAT32 `/boot` + btrfs `@nixos` at `/` and `@projects` at `/srv/projects`. Data drive intentionally absent. |
 | `hosts/backup/disko-data.nix` | Standalone layout for the backup data drive (btrfs `backup-data`, `@homeserver` subvolume). Not flake-imported — manual disko run when provisioning a fresh drive only. |
 | `hosts/backup/hardware-configuration.nix` | Hand-authored platform stub: USB-root initrd modules (xhci/uas/sd), mainline kernel pin (channel-cached — no kernel compiles on Pi or workstation), serial consoles, `installBootLoader` wrapper syncing Pi firmware + U-Boot into `/boot` |
+| `hosts/backup/compose/fluidd.yml` | Fluidd (port 8080) + `k1c-proxy` (port 7125) for the Creality K1C |
+| `hosts/backup/compose/k1c-proxy/` | Moonraker proxy that adds what the K1C stock API lacks (webcams, `server.database.list`) |
 | `hosts/backup/README.md` | Pi backup-host setup guide |
 | `hosts/workstation/configuration.nix` | Workstation NixOS config (Hyprland, PipeWire, greetd/tuigreet, Tailscale leaf, no service-hosting) |
 | `hosts/workstation/disko.nix` | Declarative disk layout: ESP + LUKS-encrypted btrfs subvolumes on the NixOS NVMe, addressed by `/dev/disk/by-id/` |

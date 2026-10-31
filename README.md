@@ -5,7 +5,7 @@ Reproducible NixOS + Docker config for a three-host home setup.
 | Host | Role | Hardware | Guide |
 |---|---|---|---|
 | `homeserver` (`hosts/main/`) | Main server — all user-facing services behind Caddy | Dual Xeon, 32–48GB DDR3, 250GB SSD boot + 4×1TB RAID 10 | [`hosts/main/README.md`](hosts/main/README.md) |
-| `backupserver` (`hosts/backup/`) | Restic backup target + room for future edge services | Raspberry Pi 4, USB-boot from SATA SSD (OS) + external USB SSD (backup data, btrfs) | [`hosts/backup/README.md`](hosts/backup/README.md) |
+| `backupserver` (`hosts/backup/`) | Restic backup target + edge services (Fluidd for the 3D printer) | Raspberry Pi 4, USB-boot from SATA SSD (OS) + external USB SSD (backup data, btrfs) | [`hosts/backup/README.md`](hosts/backup/README.md) |
 | `workstation` (`hosts/workstation/`) | Operator's daily driver (Hyprland, Tailscale leaf) | Framework 16 (Ryzen 7040), LUKS btrfs on NVMe | — |
 
 ## Repo layout

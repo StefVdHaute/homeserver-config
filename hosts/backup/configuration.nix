@@ -114,7 +114,7 @@
   ];
 
   # ============================================================
-  # SSH — only reachable via tailnet (firewall below enforces)
+  # SSH — reachable via tailnet and LAN (firewall below enforces)
   # ============================================================
   services.openssh = {
     enable = true;
@@ -137,14 +137,18 @@
   # ============================================================
   # Firewall
   # Net effect:
-  #   eth0/wlan0 → drop everything
-  #   tailscale0 → trusted (SSH 22 reachable here only)
+  #   tailscale0, LAN (192.168.128.0/23, fe80::/10 on end0) → trusted
+  #   everything else → drop
   # ============================================================
   networking.firewall = {
     enable = true;
     allowedTCPPorts = [ ];
     allowedUDPPorts = [ 41641 ]; # Tailscale direct connections
     trustedInterfaces = [ "tailscale0" ];
+    extraCommands = ''
+      iptables -A nixos-fw -s 192.168.128.0/23 -j nixos-fw-accept
+      ip6tables -A nixos-fw -i end0 -s fe80::/10 -j nixos-fw-accept
+    '';
     logRefusedConnections = true;
   };
 

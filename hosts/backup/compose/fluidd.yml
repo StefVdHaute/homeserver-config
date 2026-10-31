@@ -1,0 +1,23 @@
+services:
+  fluidd:
+    image: ghcr.io/fluidd-core/fluidd:v1.37.7
+    container_name: fluidd
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+
+  k1c-proxy:
+    build: ./k1c-proxy
+    image: k1c-proxy:local
+    container_name: k1c-proxy
+    restart: unless-stopped
+    environment:
+      - PRINTER=192.168.129.35:7125
+      - CAMERA_URL=http://192.168.129.35:8000/
+    volumes:
+      - k1c_proxy_data:/data
+    ports:
+      - "7125:7125" # Fluidd looks for the API on this port of its own host
+
+volumes:
+  k1c_proxy_data:

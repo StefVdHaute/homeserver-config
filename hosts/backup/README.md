@@ -57,7 +57,7 @@ ssh operator@backupserver.<your-tailnet>.ts.net
 
 State after first boot:
 - `operator` and `restic` users exist with authorized keys (from flake inputs)
-- SSH only reachable over the tailnet (firewall blocks WAN/LAN)
+- SSH reachable over the tailnet and the LAN (IPv4 `192.168.128.0/23`, IPv6 link-local); the firewall drops all other traffic
 - `services.smartd` posts disk alerts to main's ntfy topic `home-smart`
 - `nixos-upgrade` runs daily 05:30 but only when a restic snapshot has landed in the last 24h **and** main's ntfy responds
 - `OnFailure` hooks post `home-infra` alerts to ntfy for `nixos-upgrade`, `tailscaled`, or `mnt-backups.mount` failures
@@ -117,6 +117,19 @@ ssh operator@backupserver.<your-tailnet>.ts.net \
 
 ---
 
+## 8. Fluidd for the Creality K1C
+
+`compose/fluidd.yml` runs Fluidd and `k1c-proxy` (see `k1c-proxy/proxy.py`).
+
+```bash
+cd ~ && git clone <your-repo-url> server_config && cd server_config/hosts/backup
+docker compose -f compose/fluidd.yml up -d --build
+```
+
+Open `http://<pi-lan-ip>:8080` (LAN) or `http://backupserver:8080` (tailnet). The printer address is in `compose/fluidd.yml`; give the printer a DHCP reservation. After a change to `proxy.py`, run `up -d --build` again.
+
+---
+
 ## Future: convert to btrfs RAID 1
 
 When you add a second USB drive for redundancy:
@@ -137,4 +150,4 @@ Online; no downtime. btrfs rebalances data + metadata to mirror across both devi
 - **SSH refused from main** — confirm `tailscale status` on the Pi shows it as online, and that `homeserver`'s pubkey is in `authorized_keys` for `restic`. `sudo cat /var/lib/restic/.ssh/authorized_keys` on the Pi.
 - **nixos-upgrade skipped with "no restic snapshot newer than 24h"** — expected if backups are failing on main. Check `journalctl -u restic-backups-docker-volumes.service` and `journalctl -u restic-backups-seafile-data.service` on main first.
 - **Tailscale never registers on first boot** — the seeded auth key was probably expired (they live ≤ 90 days). Generate a fresh reusable key, then on the Pi: `sudo tee /etc/tailscale/authkey <<< 'tskey-auth-...'` and `sudo systemctl restart tailscaled`.
-- **Running Docker containers here** — Docker is enabled with its data root at `/srv/projects/docker` (the `@projects` subvolume on the OS SSD; the backup data drive stays dedicated to restic). `operator` is in the `docker` group; add compose files under a new `hosts/backup/compose/` directory as services arrive. Containers must never touch `/mnt/backups`.
+- **Running Docker containers here** — Docker is enabled with its data root at `/srv/projects/docker` (the `@projects` subvolume on the OS SSD; the backup data drive stays dedicated to restic). `operator` is in the `docker` group; compose files live in `hosts/backup/compose/` (one per service, see section 8). Containers must never touch `/mnt/backups`.
