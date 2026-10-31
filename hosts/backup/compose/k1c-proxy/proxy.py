@@ -3,10 +3,15 @@
 The stock API (nexusp) lacks the webcam component and server.database.list,
 which Fluidd needs. This proxy answers those methods and passes all other
 HTTP and websocket traffic to the printer.
+
+POST /camera relays go2rtc's WebRTC offer to the printer camera and corrects
+the answer (see high_profile_answer).
 """
 import asyncio
+import base64
 import json
 import os
+import re
 import uuid
 from pathlib import Path
 
@@ -20,7 +25,7 @@ SESSION = web.AppKey("session", ClientSession)
 HOP_HEADERS = {"host", "connection", "keep-alive", "transfer-encoding", "upgrade",
                "content-length", "content-encoding"}
 WEBCAM_DEFAULTS = {
-    "location": "printer", "service": "iframe", "enabled": True, "icon": "mdiWebcam",
+    "location": "printer", "service": "mjpegstreamer", "enabled": True, "icon": "mdiWebcam",
     "target_fps": 15, "target_fps_idle": 5, "stream_url": "", "snapshot_url": "",
     "flip_horizontal": False, "flip_vertical": False, "rotation": 0,
     "aspect_ratio": "4:3", "extra_data": {}, "source": "database",
@@ -33,7 +38,8 @@ def save_webcams(webcams):
 
 def load_webcams():
     if not STORE.exists():
-        save_webcams([{**WEBCAM_DEFAULTS, "name": "K1C", "stream_url": CAMERA_URL,
+        save_webcams([{**WEBCAM_DEFAULTS, "name": "K1C", "stream_url": "/webcam/stream.mjpeg",
+                       "snapshot_url": "/webcam/snapshot.jpg", "aspect_ratio": "16:9",
                        "uid": str(uuid.uuid4())}])
     return json.loads(STORE.read_text())
 
@@ -104,6 +110,28 @@ def add_webcam_component(text):
     return json.dumps(msg)
 
 
+def high_profile_answer(offer, answer):
+    """Replace the second codec of the answer with the offer's High-profile H.264 type.
+
+    The printer answers with payload types 96 and 0, but sends RTP with the
+    offer's High-profile H.264 type, which go2rtc then cannot map to a track.
+    go2rtc's creality client drops the first codec of the answer and uses the
+    second one.
+    """
+    pt = re.search(r"^a=fmtp:(\d+) .*profile-level-id=64", offer, re.M).group(1)
+    codec = [line for line in offer.splitlines()
+             if line.startswith((f"a=rtpmap:{pt} ", f"a=fmtp:{pt} "))]
+    lines = []
+    for line in answer.splitlines():
+        if line.startswith("m=video"):
+            fields = line.split()
+            first = fields[3]
+            lines.append(" ".join(fields[:4] + [pt]))
+        elif not line.startswith(("a=rtpmap:", "a=fmtp:")) or line.split()[0].endswith(f":{first}"):
+            lines.append(line)
+    return "\r\n".join(lines + codec) + "\r\n"
+
+
 async def websocket(request):
     try:
         printer = await request.app[SESSION].ws_connect(
@@ -164,6 +192,16 @@ async def http(request):
     return web.Response(status=resp.status, body=body, headers=headers)
 
 
+async def camera(request):
+    body = await request.read()
+    offer = json.loads(base64.b64decode(body))["sdp"]
+    async with request.app[SESSION].post(CAMERA_URL, data=body,
+                                         headers={"Content-Type": request.content_type}) as resp:
+        answer = json.loads(base64.b64decode(await resp.read()))
+    answer["sdp"] = high_profile_answer(offer, answer["sdp"])
+    return web.Response(text=base64.b64encode(json.dumps(answer).encode()).decode())
+
+
 async def client_session(app):
     async with ClientSession(timeout=ClientTimeout(total=None, sock_connect=10)) as session:
         app[SESSION] = session
@@ -173,5 +211,6 @@ async def client_session(app):
 app = web.Application(client_max_size=1024**3)
 app.cleanup_ctx.append(client_session)
 app.router.add_get("/websocket", websocket)
+app.router.add_post("/camera", camera)
 app.router.add_route("*", "/{tail:.*}", http)
 web.run_app(app, port=7125)

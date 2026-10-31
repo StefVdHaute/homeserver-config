@@ -12,6 +12,11 @@
 - [ ] Photo management (Immich) — phone camera-roll backup, replaces Google Photos
 - [ ] Dashboard / home page (Homepage / Heimdall / Dashy) — single landing page linking all services
 - [ ] Self-hosted git forge (Forgejo / Gitea) — so `system.autoUpgrade.flake` can pull from a local server instead of `github:...`, removing GitHub as a runtime dependency for daily upgrades.
+- [ ] Drop go2rtc from `hosts/backup/compose/fluidd.yml` when the OrcaSlicer Device tab can play WebRTC. go2rtc is there only because that tab (WebKitGTK) has no WebRTC. Two conditions:
+  - nixpkgs builds `webkitgtk_4_1` with WebRTC. Now it does so only with `enableExperimental`. Check: `grep -c GStreamerMediaEndpoint` on `libwebkit2gtk-4.1.so` is not 0.
+  - OrcaSlicer turns it on (`webkit_settings_set_enable_webrtc`). OrcaSlicer#15362 lists WebRTC cameras as future work.
+
+  Then set the K1C camera to `iframe` with `http://192.168.129.35:8000/`, and remove the `go2rtc` service, `go2rtc.yaml`, `fluidd-nginx.conf.template` and the `/camera` relay in `k1c-proxy`. If go2rtc fixes the K1C first (AlexxIT/go2rtc#2024), only the `/camera` relay can go.
 
 ## Future
 

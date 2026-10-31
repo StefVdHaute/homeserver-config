@@ -3,6 +3,8 @@ services:
     image: ghcr.io/fluidd-core/fluidd:v1.37.7
     container_name: fluidd
     restart: unless-stopped
+    volumes:
+      - ./fluidd-nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
     ports:
       - "8080:80"
 
@@ -13,11 +15,18 @@ services:
     restart: unless-stopped
     environment:
       - PRINTER=192.168.129.35:7125
-      - CAMERA_URL=http://192.168.129.35:8000/
+      - CAMERA_URL=http://192.168.129.35:8000/call/webrtc_local
     volumes:
       - k1c_proxy_data:/data
     ports:
       - "7125:7125" # Fluidd looks for the API on this port of its own host
+
+  go2rtc:
+    image: alexxit/go2rtc:1.9.14
+    container_name: go2rtc
+    restart: unless-stopped
+    volumes:
+      - ./go2rtc.yaml:/config/go2rtc.yaml:ro
 
 volumes:
   k1c_proxy_data:

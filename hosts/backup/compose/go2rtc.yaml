@@ -1,0 +1,5 @@
+streams:
+  k1c:
+    - webrtc:http://k1c-proxy:7125/camera#format=creality
+    # The camera's timestamps run too fast; passthrough stops ffmpeg from duplicating frames.
+    - ffmpeg:k1c#video=mjpeg#width=1280#height=720#raw=-fps_mode passthrough
