@@ -410,7 +410,6 @@ in
       "spotify"
       "clion"
       "pycharm"
-      "rider"
       "webstorm"
       "steam"
       "steam-unwrapped"
@@ -485,7 +484,6 @@ in
     gh                 # forge-status: `gh auth login`
     jetbrains.clion
     jetbrains.pycharm
-    jetbrains.rider
     jetbrains.webstorm
 
     # System tools
