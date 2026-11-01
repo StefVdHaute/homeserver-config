@@ -515,6 +515,7 @@ in
     mpv
     qbittorrent
     gnome-calculator
+    prismlauncher      # Minecraft; wrapper bundles the JDKs each MC version needs
   ];
 
   # Fallback allow/deny lists for spotifyAdblock; ~/.config/spotify-adblock/
