@@ -480,6 +480,7 @@ in
     # Development
     cmake
     claude-code
+    pi-coding-agent    # pi; config is the Stow-managed ~/.pi/agent
     glab               # forge-status (the bar's code review): `glab auth login`
     gh                 # forge-status: `gh auth login`
     jetbrains.clion
