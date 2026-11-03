@@ -75,11 +75,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793659002,
-        "narHash": "sha256-MpBjyaWBKOmFLuSVjkI6E5bOZQnCS60S6XHBvzJlqdA=",
+        "lastModified": 1793741026,
+        "narHash": "sha256-4j820/OyaHdzjYlXzpgQ/V1f53VgJprQrbUWrmvmUkk=",
         "ref": "refs/heads/main",
-        "rev": "2bfa3133cbbe79ff99312d386ab03cef976fd73e",
-        "revCount": 143,
+        "rev": "854a881defd2be500e3e480ec7225525bb46fced",
+        "revCount": 144,
         "type": "git",
         "url": "ssh://git@github.com/StefVdHaute/dotfiles"
       },
