@@ -23,6 +23,15 @@ let
     checkOpts = [ ];   # empty = structural check every run, no --read-data
     extraBackupArgs = [ "--compression" "max" ];
   };
+
+  # backupCleanupCommand runs as ExecStopPost, i.e. after failures too;
+  # only ping "Backup OK" when the unit actually succeeded (failures get
+  # their own alert via OnFailure).
+  okOnSuccess = job: ''
+    if [ "$SERVICE_RESULT" = success ]; then
+      ${ntfyNotify} home-backup 1 'Backup OK' '${job} snapshot completed'
+    fi
+  '';
 in
 
 {
@@ -265,12 +274,12 @@ in
       paths = [ "/mnt/data/docker/volumes" ];
       exclude = [ "*.tmp" "*.log" ];
       extraBackupArgs = resticCommon.extraBackupArgs ++ [ "--tag" "docker-volumes" ];
-      backupCleanupCommand = "${ntfyNotify} home-backup 1 'Backup OK' 'docker-volumes snapshot completed'";
+      backupCleanupCommand = okOnSuccess "docker-volumes";
     };
     seafile-data = resticCommon // {
       paths = [ "/mnt/data/seafile" ];
       extraBackupArgs = resticCommon.extraBackupArgs ++ [ "--tag" "seafile-data" ];
-      backupCleanupCommand = "${ntfyNotify} home-backup 1 'Backup OK' 'seafile-data snapshot completed'";
+      backupCleanupCommand = okOnSuccess "seafile-data";
     };
     # /var/lib/AdGuardHome is a DynamicUser symlink into /var/lib/private;
     # restic follows it. After a restore, stop adguardhome and `chown -R`
@@ -278,7 +287,7 @@ in
     adguard-state = resticCommon // {
       paths = [ "/var/lib/AdGuardHome" ];
       extraBackupArgs = resticCommon.extraBackupArgs ++ [ "--tag" "adguard-state" ];
-      backupCleanupCommand = "${ntfyNotify} home-backup 1 'Backup OK' 'adguard-state snapshot completed'";
+      backupCleanupCommand = okOnSuccess "adguard-state";
     };
   };
 
