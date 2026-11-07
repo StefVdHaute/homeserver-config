@@ -62,10 +62,15 @@
 Main hardware (Dell R720), in this order:
 
 - [ ] Update iDRAC7 firmware (now 2.52.52.52; 2.65.65.65 is the last release) and Lifecycle Controller. BIOS 2.9.0 is already current.
-- [ ] Cross-flash the PERC H710P Mini to IT mode (LSI SAS2308) — follow the Fohdeesha guide for the H710P Mini. Note the controller's SAS address before wiping it. The flash leaves the card without a boot ROM, so also flash the UEFI one (`flashboot /root/Bootloaders/x64sas2.rom`); without it the R720's UEFI cannot see the disks and can't boot from them. Afterwards disable `ThirdPartyPCIFanResponse` (fans otherwise stick at ~30%) and set the boot mode back to UEFI. Full procedure: `plan.md` (untracked).
-- [ ] Boot an installer, check that all four disks show up as plain disks with SMART (`smartctl -a /dev/sdX`), and put their `/dev/disk/by-id/` paths into `diskIds` in `hosts/main/disko.nix`.
+- [x] Cross-flash the PERC H710P Mini to IT mode (LSI SAS2308) — follow the Fohdeesha guide for the H710P Mini. Note the controller's SAS address before wiping it. The flash leaves the card without a boot ROM, so also flash the UEFI one (`flashboot /root/Bootloaders/x64sas2.rom`); without it the R720's UEFI cannot see the disks and can't boot from them. Afterwards disable `ThirdPartyPCIFanResponse` (fans otherwise stick at ~30%) and set the boot mode back to UEFI. Full procedure: `plan.md` (untracked).
+- [x] Boot an installer, check that all four disks show up as plain disks with SMART (`smartctl -a /dev/sdX`), and put their `/dev/disk/by-id/` paths into `diskIds` in `hosts/main/disko.nix`.
 - [ ] Set the iDRAC time zone to Europe/Brussels (it is on UTC-06:00).
 - [ ] Test the disk failure path once, before real data: pull one disk with the server running, reboot, check that `/` comes up, `/mnt/data` stays unmounted and the `home-smart` alerts arrive, then follow `hosts/main/README.md` §13 to rebuild.
+- [ ] Replace DIMM_B2 (4G Samsung M393B5170FHD-CH9): the iDRAC event log has uncorrectable (multi-bit) ECC errors on it in 2025-08 and 2025-10. Or pull B2 + B3 and run on 24G.
+- [ ] Apply the config that's in git: main still runs the first install, with no sudo and an expired Tailscale key. Reinstall in mount mode (no wipe) via the installer ISO — steps in `plan.md` (untracked).
+- [ ] Untie `nixos-upgrade` from the restic jobs until the Pi works, or main never upgrades and alerts every night.
+- [ ] Stop restic writing to the Pi's OS SSD when `/mnt/backups` isn't mounted (0000 mountpoint, create `homeserver` in `disko-data.nix`, drop the tmpfiles rule).
+- [ ] ACME: the first order got NXDOMAIN on the TXT record (deSEC token works). Check the timer's retry succeeded; if not, add a DNS propagation delay.
 - [ ] Later: replace the ST1000DM010 desktop disks with NAS-rated ones (ERC/TLER), and/or add an SSD on the free onboard SATA ports for `/`.
 
 - [ ] Create a plan for first deployment success review and to prepare for integration hell
