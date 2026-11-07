@@ -61,6 +61,7 @@ State after first boot:
 - `services.smartd` posts disk alerts to main's ntfy topic `home-smart`
 - `nixos-upgrade` runs daily 05:30 but only when a restic snapshot has landed in the last 24h **and** main's ntfy responds
 - `OnFailure` hooks post `home-infra` alerts to ntfy for `nixos-upgrade`, `tailscaled`, or `mnt-backups.mount` failures
+- `backup-drive-check.timer` posts a `home-infra` alert every 3h while the data drive isn't mounted
 
 ---
 
@@ -73,10 +74,10 @@ git clone <your-repo-url> server_config && cd server_config/hosts/backup
 ls -l /dev/disk/by-id/ | grep usb        # find the data drive; set device= in disko-data.nix
 sudo nix run --extra-experimental-features 'nix-command flakes' \
   github:nix-community/disko -- --mode destroy,format,mount ./disko-data.nix
-sudo systemd-tmpfiles --create           # creates /mnt/backups/homeserver for restic
+sudo install -d -m700 -o restic -g restic /mnt/backups/homeserver   # restic repo dir, on the drive
 ```
 
-The runtime mount is by-label (`backup-data`, subvol `@homeserver`) via `fileSystems` in `configuration.nix` — enumeration never matters again after formatting.
+The runtime mount is by-label (`backup-data`, subvol `@homeserver`) via `fileSystems` in `configuration.nix` — enumeration never matters again after formatting. The repo directory is created on the drive itself, never by the config: with the drive absent, `/mnt/backups` is an automount that errors out over a `root:root 0000` directory, so restic fails loudly instead of writing a fresh repo to the OS SSD.
 
 ---
 
@@ -146,7 +147,7 @@ Online; no downtime. btrfs rebalances data + metadata to mirror across both devi
 ## Troubleshooting
 
 - **Pi doesn't boot from the SSD** — in EEPROM order: (1) bootloader too old for GPT/USB (< 2020-10-28) → run the Imager "USB Boot" utility SD once; (2) an inserted SD is shadowing the SSD → remove it or set `BOOT_ORDER=0xf14`; (3) watch the boot on serial (`enable_uart=1` is set in config.txt, 115200 baud on GPIO 14/15) — firmware messages but no U-Boot means a broken FAT partition, U-Boot but no kernel means extlinux/initrd trouble.
-- **`/mnt/backups` didn't mount after boot** — check `systemctl status mnt-backups.mount`. `nofail` in the fs options means the Pi boots anyway; the mount may have failed because the drive wasn't plugged in or the label doesn't match `backup-data`. Run `lsblk -f` to confirm the label.
+- **`/mnt/backups` didn't mount** ("Backup drive missing" on `home-infra`) — it's an automount (`x-systemd.automount`, 30s device timeout), so the Pi boots without the drive and accesses fail instead of hitting the OS SSD. Check `systemctl status mnt-backups.mount` and `lsblk -f` (label must be `backup-data`). `ls -ld /mnt/backups` shows `d---------` only when nothing is mounted at all; that's the intended fallback.
 - **SSH refused from main** — confirm `tailscale status` on the Pi shows it as online, and that `homeserver`'s pubkey is in `authorized_keys` for `restic`. `sudo cat /var/lib/restic/.ssh/authorized_keys` on the Pi.
 - **nixos-upgrade skipped with "no restic snapshot newer than 24h"** — expected if backups are failing on main. Check `journalctl -u restic-backups-docker-volumes.service` and `journalctl -u restic-backups-seafile-data.service` on main first.
 - **Tailscale never registers on first boot** — the seeded auth key was probably expired (they live ≤ 90 days). Generate a fresh reusable key, then on the Pi: `sudo tee /etc/tailscale/authkey <<< 'tskey-auth-...'` and `sudo systemctl restart tailscaled`.

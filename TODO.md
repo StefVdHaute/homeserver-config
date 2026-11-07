@@ -69,7 +69,8 @@ Main hardware (Dell R720), in this order:
 - [ ] Replace DIMM_B2 (4G Samsung M393B5170FHD-CH9): the iDRAC event log has uncorrectable (multi-bit) ECC errors on it in 2025-08 and 2025-10. Or pull B2 + B3 and run on 24G.
 - [ ] Apply the config that's in git: main still runs the first install, with no sudo and an expired Tailscale key. Reinstall in mount mode (no wipe) via the installer ISO — steps in `plan.md` (untracked).
 - [ ] Untie `nixos-upgrade` from the restic jobs until the Pi works, or main never upgrades and alerts every night.
-- [ ] Stop restic writing to the Pi's OS SSD when `/mnt/backups` isn't mounted (0000 mountpoint, create `homeserver` in `disko-data.nix`, drop the tmpfiles rule).
+- [ ] Pi: deploy the wrong-target guard (automount + 0000 mountpoint). First `sudo rmdir /mnt/backups/homeserver` on the Pi (if it refuses, data already landed on the OS SSD). Verify with the drive absent: `sudo -u restic ls /mnt/backups` fails; a manual restic run on main fails with exactly one "Backup FAILED" and no "Backup OK".
+- [ ] Pi: SMART for the data NVMe (JMS583 bridge) — add its by-id to `alerts.smartd.devices`, needs `-d sntjmicron` instead of the global `-d sat` (per-device type in `modules/alerts.nix`).
 - [ ] ACME: the first order got NXDOMAIN on the TXT record (deSEC token works). Check the timer's retry succeeded; if not, add a DNS propagation delay.
 - [ ] Later: replace the ST1000DM010 desktop disks with NAS-rated ones (ERC/TLER), and/or add an SSD on the free onboard SATA ports for `/`.
 

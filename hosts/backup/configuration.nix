@@ -35,11 +35,64 @@
   # Storage — backup data drive
   # Outside disko so no install/reinstall can format the restic repo;
   # provision a fresh drive with ./disko-data.nix.
+  #
+  # Restic must never write to the OS SSD when the drive is absent (main
+  # runs `initialize = true` and would init a fresh repo there, reporting
+  # success). Two guards:
+  #   - automount: an autofs mount always covers /mnt/backups, so with the
+  #     drive absent every access fails after device-timeout instead of
+  #     landing on the SSD. Boot no longer waits for the drive either.
+  #   - the bare mountpoint under it is root:root 0000 (activation script
+  #     below), in case the automount is ever stopped.
+  # The repo dir /mnt/backups/homeserver lives on the drive, created once
+  # at provisioning (README §4).
   # ============================================================
   fileSystems."/mnt/backups" = {
     device = "/dev/disk/by-label/backup-data";
     fsType = "btrfs";
-    options = [ "subvol=@homeserver" "compress=zstd:3" "noatime" "nofail" ];
+    options = [
+      "subvol=@homeserver" "compress=zstd:3" "noatime" "nofail"
+      "x-systemd.automount" "x-systemd.device-timeout=30s"
+    ];
+  };
+
+  # At boot this runs before systemd sets up the automount, so it always
+  # reaches the bare directory. Skipped when anything is mounted there
+  # (touching the automount would block a switch on an absent drive).
+  system.activationScripts.backupMountpoint.text = ''
+    if ! ${pkgs.util-linux}/bin/mountpoint -q /mnt/backups; then
+      mkdir -p /mnt/backups
+      chown root:root /mnt/backups
+      chmod 0000 /mnt/backups
+    fi
+  '';
+
+  # Every 3h: alert when the drive isn't actually mounted. Needed because a
+  # drive that never appears leaves mnt-backups.mount inactive, not failed,
+  # so its OnFailure hook doesn't fire. The autofs mount always counts as a
+  # mountpoint, hence the btrfs type check after triggering it.
+  systemd.services.backup-drive-check = {
+    description = "Check that the backup data drive is mounted";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = pkgs.writeShellScript "backup-drive-check" ''
+        ${pkgs.coreutils}/bin/ls /mnt/backups >/dev/null 2>&1 || true
+        if ! ${pkgs.util-linux}/bin/findmnt -t btrfs /mnt/backups >/dev/null; then
+          ${ntfyNotify} home-infra 4 \
+            "Backup drive missing on ${config.networking.hostName}" \
+            "/mnt/backups is not mounted; restic backups from main will fail. Check lsblk -f and journalctl -u mnt-backups.mount"
+        fi
+      '';
+    };
+    # Catches the check itself failing (e.g. ntfy unreachable).
+    unitConfig.OnFailure = [ "ntfy-infra-failure@backup-drive-check.service" ];
+  };
+  systemd.timers.backup-drive-check = {
+    wantedBy = [ "timers.target" ];
+    timerConfig = {
+      OnBootSec = "15m";
+      OnUnitActiveSec = "3h";
+    };
   };
 
   # ============================================================
@@ -108,11 +161,6 @@
   };
   users.groups.restic = { };
 
-  # Pre-create the repository directory owned by `restic`
-  systemd.tmpfiles.rules = [
-    "d /mnt/backups/homeserver 0700 restic restic - -"
-  ];
-
   # ============================================================
   # SSH — reachable via tailnet and LAN (firewall below enforces)
   # ============================================================
@@ -180,18 +228,17 @@
   #     not mounted), OR
   #   - no restic snapshot is newer than 24h, OR
   #   - main's ntfy /v1/health is unreachable.
+  # No ConditionPath* on /mnt/backups: PID1 would trigger its own
+  # automount. The ExecCondition runs in a child process instead.
   systemd.services.nixos-upgrade = {
-    unitConfig = {
-      ConditionPathIsDirectory = "/mnt/backups/homeserver/snapshots";
-      OnFailure = [ "ntfy-infra-failure@nixos-upgrade.service" ];
-    };
+    unitConfig.OnFailure = [ "ntfy-infra-failure@nixos-upgrade.service" ];
     serviceConfig.ExecCondition =
       let
         script = pkgs.writeShellApplication {
           name = "nixos-upgrade-checks";
           runtimeInputs = [ pkgs.findutils pkgs.curl pkgs.coreutils ];
           text = ''
-            recent=$(find /mnt/backups/homeserver/snapshots -type f -newermt '-24 hours' -print -quit)
+            recent=$(find /mnt/backups/homeserver/snapshots -type f -newermt '-24 hours' -print -quit 2>/dev/null || true)
             if [ -z "$recent" ]; then
               echo "no restic snapshot newer than 24h — skipping upgrade"
               exit 1

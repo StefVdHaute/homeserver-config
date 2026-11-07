@@ -209,7 +209,7 @@ git clone <your-repo-url> server_config && cd server_config/hosts/backup
 ls -l /dev/disk/by-id/ | grep usb        # find the data drive; set device= in disko-data.nix
 sudo nix run --extra-experimental-features 'nix-command flakes' \
   github:nix-community/disko -- --mode destroy,format,mount ./disko-data.nix
-sudo systemd-tmpfiles --create           # creates /mnt/backups/homeserver for restic
+sudo install -d -m700 -o restic -g restic /mnt/backups/homeserver   # restic repo dir, on the drive
 ```
 
 The runtime mount is by-label (`backup-data`) via `fileSystems` in `configuration.nix`, so this is a one-time step per drive.

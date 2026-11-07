@@ -104,6 +104,7 @@ Restic is not in the table above — it runs as a NixOS service (`services.resti
 - **Integrity:** fast `restic check` after every backup on main; additionally a `restic-check-deep.timer` runs monthly (first-of-month, 6h randomised delay) with `--read-data-subset=10%` — samples 10% of pack data per run so the whole repo gets verified statistically over ~10 months. Success → silent ntfy ping on `home-backup`; failure → audible via the same `ntfy-backup-failure@` template used for the daily jobs
 - **Outcome alerts:** success → silent ntfy ping on `home-backup` (via the module's `backupCleanupCommand`); failure → audible ntfy ping via a templated `ntfy-backup-failure@.service` wired through each unit's `OnFailure`.
 - **Security:** restic password only lives on `homeserver`; a compromise of the Pi cannot decrypt backups
+- **Wrong-target guard:** on the Pi `/mnt/backups` is an automount (30s device timeout) over a `root:root 0000` directory, and the repo dir `homeserver` exists only on the data drive. With the drive absent restic's SFTP access fails, so `initialize = true` can't create a repo on the OS SSD. `backup-drive-check.timer` alerts `home-infra` every 3h while it's unmounted (a never-appearing device leaves the mount unit inactive, so its `OnFailure` doesn't fire). Main's "Backup OK" ping is gated on `$SERVICE_RESULT` because `backupCleanupCommand` is ExecStopPost and also runs after failures.
 - **Aliveness signal:** the Pi's `nixos-upgrade` has an `ExecCondition` that looks for any file under `/mnt/backups/homeserver/snapshots/` newer than 24h. Restic's own snapshot file layout doubles as proof that main is alive and the backup pipeline is working — no extra SSH round-trip from main is needed to write a heartbeat file.
 - **Goal:** full restore possible from Pi in case of main-server failure
 
@@ -120,7 +121,7 @@ Operator alerts go to a self-hosted [ntfy](https://ntfy.sh) server running on `h
 Topics, subscribed by the operator's phone:
 
 - **`home-backup`** — restic success pings (Priority 1 / silent) and failures (default priority / audible).
-- **`home-smart`** — `smartd` alerts from both hosts (main's RAID drives + the Pi's external USB SSD).
+- **`home-smart`** — `smartd` alerts from both hosts (main's RAID drives + the Pi's OS SSD; the Pi's data NVMe is not monitored yet, see TODO).
 - **`home-updates`** — WUD container-update notifications.
 - **`home-infra`** — Pi-side host-health failures (`nixos-upgrade.service`, `mnt-backups.mount`, `tailscaled.service`). Daemon crashes only — connectivity-level Tailscale monitoring is a follow-up.
 
