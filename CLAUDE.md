@@ -79,6 +79,7 @@ This file is the single source of truth for architecture, decisions, and the beh
 | Portainer | Container management web UI |
 | WUD | Container update monitoring (notify-only, no auto-updates); posts to ntfy `home-updates` |
 | ntfy | Self-hosted push-notification server for operator alerts (tailnet-only) |
+| Cockpit + Grafana (in-band iDRAC) | NixOS services in `hosts/main/monitoring.nix`, not containers. `cockpit.DOMAIN`: system overview, journal (incl. the BMC event log via `ipmiseld`), services, storage, terminal, reboot. `grafana.DOMAIN`: "Server health (R720)" home dashboard (iDRAC summary: power, temps, fans, PSUs, sensor states, SEL, ECC, SMART, mdadm/btrfs) + "Node Exporter Full". Prometheus (9092, 90d) scrapes node, ipmi (local `/dev/ipmi0`, runs as root for freeipmi) and smartctl exporters; alerts go Alertmanager → alertmanager-ntfy → ntfy topic from the rule's `topic` label (`home-infra`/`home-smart`). Power-on and console while the OS is down stay iDRAC-only. |
 | AdGuard Home | Network-wide DNS + ad/tracker blocking (NixOS `services.adguardhome`, not a container). UI at `adguard.DOMAIN`; DNS on 53 reachable from tailnet + LAN. Upstream: Quad9 + Cloudflare over DoT. |
 
 Restic is not in the table above — it runs as a NixOS service (`services.restic.backups`), not a Docker container. See the Backup & Restore section below.
@@ -159,6 +160,8 @@ Two categories:
 | `secrets/acme-credentials.env.age` | `/run/agenix/acme-credentials` (owner `acme`) | `security.acme` for deSEC DNS-01 |
 | `secrets/main-root-sshkey.age` | `/root/.ssh/id_ed25519` (symlink → `/run/agenix/main-root-sshkey`) | restic SFTP client identity |
 | `secrets/tailscale-authkey.age` | `/run/agenix/tailscale-authkey` | `services.tailscale.authKeyFile` (first registration) |
+| `secrets/grafana-secret-key.age` | `/run/agenix/grafana-secret-key` (owner `grafana`) | Grafana `security.secret_key` (encrypts its DB secrets) |
+| `secrets/grafana-admin-password.age` | `/run/agenix/grafana-admin-password` (owner `grafana`) | Grafana `admin` login at `grafana.DOMAIN` |
 | `secrets/operator-password.age` | `/run/agenix/operator-password` | `operator`'s `hashedPasswordFile` — sudo password (SSH stays key-only, root login off) |
 
 **(3) Compose-side runtime config** — operator-managed, **not** agenix:
@@ -233,6 +236,8 @@ The deploy playbook's secrets-inventory section calls this out at install time �
 | `modules/blender-mcp/package.nix` | Official Blender Lab MCP server (not in nixpkgs), built from the upstream git tag. Flake output `packages.x86_64-linux.blender-mcp` for `nix-update`. Also ships the matching Blender add-on, which the workstation exposes as a System extension via `BLENDER_SYSTEM_EXTENSIONS`. |
 | `hosts/main/configuration.nix` | Main host NixOS config (boot, RAID, Docker, SSH, Tailscale, firewall, auto-upgrade) |
 | `hosts/main/disko.nix` | Declarative disk layout over the 4 disks (by-id): per disk an ESP, a member of the mdadm RAID 10 `os` (btrfs `@nixos` at `/`), and a member of the btrfs RAID 1 (`@data` at `/mnt/data`) |
+| `hosts/main/monitoring.nix` | Cockpit, Prometheus + exporters (node, ipmi, smartctl), Alertmanager → ntfy, Grafana with provisioned dashboards, `ipmiseld`; firewall opens Grafana/Cockpit/AdGuard to Caddy on the `br-proxy` bridge only |
+| `hosts/main/dashboards/server-health.nix` | The "Server health (R720)" Grafana dashboard as Nix, rendered to JSON by `monitoring.nix` |
 | `hosts/main/storage.nix` | Boot and disk plumbing for that layout: GRUB `mirroredBoots` over the four ESPs, mdadm + btrfs RAID alerts, `RequiresMountsFor` gates, scrub, desktop-disk timeouts, zram |
 | `hosts/main/hardware-configuration.nix` | Hand-authored platform stub for the R720: initrd modules (mpt3sas, raid10/md_mod, btrfs), kvm-intel, IPMI modules, Intel microcode |
 | `hosts/main/Caddyfile` | Reverse proxy routes for all main-host services |

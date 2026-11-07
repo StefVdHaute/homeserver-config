@@ -6,7 +6,7 @@
 
 ## Services
 
-- [ ] Monitoring/alerting (Grafana + Prometheus + node-exporter)
+- [ ] Monitoring/alerting: written (`hosts/main/monitoring.nix`, Cockpit + Grafana + Prometheus + IPMI/SMART exporters + alerts to ntfy), not yet deployed or tested on the R720. Test: Grafana home dashboard fills (IPMI sensors, PSUs, SEL, SMART for all four disks), Cockpit logs in as operator and shows the md array, `journalctl -u ipmiseld` shows the SEL, a test alert reaches ntfy.
 - [ ] Log viewer (e.g. Dozzle)
 - [ ] Uptime monitoring (Uptime Kuma / Gatus) — ideally on the Pi so it probes main from outside and catches network-side failures main can't self-report
 - [ ] Photo management (Immich) — phone camera-roll backup, replaces Google Photos

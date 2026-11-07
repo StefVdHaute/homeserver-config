@@ -67,6 +67,27 @@ ntfy.{$DOMAIN} {
 	reverse_proxy ntfy:80
 }
 
+# Grafana on the host (hosts/main/monitoring.nix): server health dashboards.
+grafana.{$DOMAIN} {
+	import acme_tls
+	import secure_headers
+	reverse_proxy host.docker.internal:3001
+}
+
+# Cockpit on the host (hosts/main/monitoring.nix): the in-band iDRAC.
+# Not `secure_headers`: Cockpit renders its pages in same-origin iframes,
+# which X-Frame-Options DENY would block.
+cockpit.{$DOMAIN} {
+	import acme_tls
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "no-referrer"
+	}
+	reverse_proxy host.docker.internal:9090
+}
+
 # AdGuard Home admin UI on the host, via host.docker.internal
 # (extra_hosts in hosts/main/compose/caddy.yml).
 adguard.{$DOMAIN} {

@@ -16,4 +16,6 @@ in {
   "main-root-sshkey.age".publicKeys = mainSecrets;
   "tailscale-authkey.age".publicKeys = mainSecrets;
   "operator-password.age".publicKeys = mainSecrets;
+  "grafana-secret-key.age".publicKeys = mainSecrets;
+  "grafana-admin-password.age".publicKeys = mainSecrets;
 }

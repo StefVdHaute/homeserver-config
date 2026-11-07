@@ -306,7 +306,8 @@ ls /var/lib/acme/<your-domain>/      # cert.pem, key.pem, fullchain.pem, chain.p
 ### 5.8 Bring up Docker services (≈ 10 min)
 
 ```bash
-docker network create proxy
+# Fixed bridge name: the host firewall opens AdGuard/Grafana/Cockpit to Caddy on br-proxy only.
+docker network create -o com.docker.network.bridge.name=br-proxy proxy
 
 # Caddy first (other services route via the proxy network through it)
 docker compose --env-file .env -f compose/caddy.yml up -d
@@ -473,6 +474,8 @@ sudo mdadm --monitor --scan --test --oneshot
 | `/etc/nixos/main-root-key{,.pub}` | Workstation | Main's root SSH keypair. Private encrypted into agenix; pubkey is a flake input → Pi's restic authorized_keys. | Medium — regenerate, re-encrypt, re-push Pi config. |
 | `secrets/restic.env.age` | Repo (encrypted) | Restic repo URL + encryption password | **CATASTROPHIC** — `RESTIC_PASSWORD` loss = backups unrecoverable forever. |
 | `secrets/acme-credentials.env.age` | Repo (encrypted) | deSEC API token | Medium — revoke in deSEC dashboard, issue new, re-encrypt. |
+| `secrets/grafana-admin-password.age` | Repo (encrypted) | Grafana `admin` password (random) | Low — read it with `agenix -d`; re-encrypt a new one to rotate. |
+| `secrets/grafana-secret-key.age` | Repo (encrypted) | Grafana's `secret_key` (random) | Low — rotating it invalidates secrets Grafana stored in its DB (none are, everything is provisioned). |
 | `secrets/operator-password.age` | Repo (encrypted) | SHA-512 hash of operator's sudo password on main | Low — re-encrypt a new `mkpasswd -m sha-512` hash, rebuild. Losing it means no sudo on main (SSH still works). |
 | `secrets/main-root-sshkey.age` | Repo (encrypted) | Main's root SSH private (for restic SFTP) | Medium — regenerate keypair, re-encrypt this file, update `/etc/nixos/main-root-key.pub` so Pi re-bakes the new pubkey. |
 | `secrets/tailscale-authkey.age` | Repo (encrypted) | Reusable Tailscale auth key | Low — generate a new one in the Tailscale admin, re-encrypt. |

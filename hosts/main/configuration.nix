@@ -29,6 +29,7 @@ in
   imports = [
     ./hardware-configuration.nix
     ./storage.nix
+    ./monitoring.nix
     ../../modules/common.nix
     ../../modules/alerts.nix
   ];

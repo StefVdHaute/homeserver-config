@@ -212,10 +212,10 @@ Caddy picks up the cert files when started in §6. `caddy-reload-certs.service` 
 
 ## 6. Create the Docker network
 
-All services share a single network for Caddy to reach them:
+All services share a single network for Caddy to reach them. Give its bridge a fixed name: the host firewall opens the host-side services Caddy proxies to (AdGuard 3000, Grafana 3001, Cockpit 9090) only on `br-proxy` (see `monitoring.nix`):
 
 ```bash
-docker network create proxy
+docker network create -o com.docker.network.bridge.name=br-proxy proxy
 ```
 
 ---
