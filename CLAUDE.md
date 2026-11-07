@@ -158,6 +158,8 @@ Two categories:
 | `secrets/restic.env.age` | `/run/agenix/restic-env` | restic services + monthly deep check |
 | `secrets/acme-credentials.env.age` | `/run/agenix/acme-credentials` (owner `acme`) | `security.acme` for deSEC DNS-01 |
 | `secrets/main-root-sshkey.age` | `/root/.ssh/id_ed25519` (symlink → `/run/agenix/main-root-sshkey`) | restic SFTP client identity |
+| `secrets/tailscale-authkey.age` | `/run/agenix/tailscale-authkey` | `services.tailscale.authKeyFile` (first registration) |
+| `secrets/operator-password.age` | `/run/agenix/operator-password` | `operator`'s `hashedPasswordFile` — sudo password (SSH stays key-only, root login off) |
 
 **(3) Compose-side runtime config** — operator-managed, **not** agenix:
 

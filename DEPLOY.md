@@ -104,6 +104,9 @@ $AGENIX -i ~/.ssh/id_ed25519 -e main-root-sshkey.age
 
 # Tailscale auth key (just the tskey-auth-... string, single line)
 $AGENIX -i ~/.ssh/id_ed25519 -e tailscale-authkey.age
+
+# operator's sudo password on main: one line, the output of `mkpasswd -m sha-512`
+$AGENIX -i ~/.ssh/id_ed25519 -e operator-password.age
 ```
 
 ### 2.5 Lock + verify
@@ -261,9 +264,9 @@ rm -rf /tmp/main-extra
 ```bash
 # Approve homeserver in the Tailscale admin first.
 ssh operator@homeserver.<your-tailnet>.ts.net
-sudo passwd operator
+# sudo uses the password whose hash is in secrets/operator-password.age
 cat /proc/mdstat              # verify RAID 10 healthy + resync clean
-ls /run/agenix/               # restic-env, acme-credentials, main-root-sshkey, tailscale-authkey
+sudo ls /run/agenix/          # restic-env, acme-credentials, main-root-sshkey, tailscale-authkey, operator-password
 ```
 
 ### 5.5 Clone the repo on main
@@ -470,6 +473,7 @@ sudo mdadm --monitor --scan --test --oneshot
 | `/etc/nixos/main-root-key{,.pub}` | Workstation | Main's root SSH keypair. Private encrypted into agenix; pubkey is a flake input → Pi's restic authorized_keys. | Medium — regenerate, re-encrypt, re-push Pi config. |
 | `secrets/restic.env.age` | Repo (encrypted) | Restic repo URL + encryption password | **CATASTROPHIC** — `RESTIC_PASSWORD` loss = backups unrecoverable forever. |
 | `secrets/acme-credentials.env.age` | Repo (encrypted) | deSEC API token | Medium — revoke in deSEC dashboard, issue new, re-encrypt. |
+| `secrets/operator-password.age` | Repo (encrypted) | SHA-512 hash of operator's sudo password on main | Low — re-encrypt a new `mkpasswd -m sha-512` hash, rebuild. Losing it means no sudo on main (SSH still works). |
 | `secrets/main-root-sshkey.age` | Repo (encrypted) | Main's root SSH private (for restic SFTP) | Medium — regenerate keypair, re-encrypt this file, update `/etc/nixos/main-root-key.pub` so Pi re-bakes the new pubkey. |
 | `secrets/tailscale-authkey.age` | Repo (encrypted) | Reusable Tailscale auth key | Low — generate a new one in the Tailscale admin, re-encrypt. |
 | `hosts/main/.env` | Main (gitignored, in repo clone) | Compose env: DOMAIN + service passwords + Portainer hash + Joplin admin password | Medium — recreate from password manager. |

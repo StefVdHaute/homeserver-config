@@ -71,6 +71,9 @@ $AGENIX -i ~/.ssh/id_ed25519 -e main-root-sshkey.age
 
 # Tailscale auth key (just the tskey-auth-... string)
 $AGENIX -i ~/.ssh/id_ed25519 -e tailscale-authkey.age
+
+# operator's sudo password: one line, the output of `mkpasswd -m sha-512`
+$AGENIX -i ~/.ssh/id_ed25519 -e operator-password.age
 ```
 
 Lock the new path inputs into `flake.lock`:
@@ -116,12 +119,15 @@ Nixos-anywhere kexecs into the NixOS installer, runs disko to partition + format
 
 ```bash
 ssh operator@<main-lan-ip>
-sudo passwd operator
+# sudo asks for operator's password: its hash is in
+# secrets/operator-password.age (agenix; generate with `mkpasswd -m sha-512`).
+# Without it sudo can never succeed, since SSH login is key-only and root
+# login is off.
 cat /proc/mdstat              # verify the `os` RAID 10 is [UUUU]
 sudo btrfs filesystem show /mnt/data   # 4 devices, none missing
 sudo btrfs filesystem df /mnt/data     # Data RAID1, Metadata RAID1C3
 for d in /sys/block/sd?/device/timeout; do cat $d; done   # 180 on all four
-ls /run/agenix/               # restic-env, acme-credentials, main-root-sshkey, tailscale-authkey
+sudo ls /run/agenix/          # restic-env, acme-credentials, main-root-sshkey, tailscale-authkey, operator-password
 ```
 
 Tailscale registers itself on first boot (via the agenix-decrypted auth key) and waits in the Tailscale admin for your manual approval click.

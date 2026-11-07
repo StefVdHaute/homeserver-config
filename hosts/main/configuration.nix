@@ -54,6 +54,11 @@ in
     };
 
     tailscale-authkey.file = ../../secrets/tailscale-authkey.age;
+
+    # operator's sudo password: one line, a SHA-512 crypt hash
+    # (`mkpasswd -m sha-512`). agenix decrypts it before the users are
+    # created, so it is applied on every activation.
+    operator-password.file = ../../secrets/operator-password.age;
   };
 
   # Local ntfy container (compose port map).
@@ -138,7 +143,10 @@ in
     extraGroups = [ "wheel" "docker" ];
     # keys/operator.pub
     openssh.authorizedKeys.keyFiles = [ operatorPubkeyPath ];
-    # Set password on first boot with: passwd operator
+    # sudo password (secrets/operator-password.age). SSH login stays
+    # key-only; this is only for sudo and the iDRAC console. Without it
+    # operator has no password and sudo can never succeed.
+    hashedPasswordFile = config.age.secrets.operator-password.path;
   };
 
   # ============================================================

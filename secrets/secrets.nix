@@ -15,4 +15,5 @@ in {
   "acme-credentials.env.age".publicKeys = mainSecrets;
   "main-root-sshkey.age".publicKeys = mainSecrets;
   "tailscale-authkey.age".publicKeys = mainSecrets;
+  "operator-password.age".publicKeys = mainSecrets;
 }
