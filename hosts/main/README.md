@@ -1,11 +1,11 @@
 # Main host (`homeserver`) — setup guide
 
-Scope: the dual-Xeon main server running all user-facing services (Seafile, Vaultwarden, Joplin, Portainer, WUD, ntfy) behind Caddy. For the Raspberry Pi backup target, see [`hosts/backup/README.md`](../backup/README.md).
+Scope: the main server (Dell PowerEdge R720, dual Xeon E5-2620) running all user-facing services (Seafile, Vaultwarden, Joplin, Portainer, WUD, ntfy) behind Caddy. For the Raspberry Pi backup target, see [`hosts/backup/README.md`](../backup/README.md).
 
 ## Prerequisites
 
 - Any Linux with SSH-as-root booted on the target (Ubuntu live USB, NixOS installer ISO, minimal cloud image — nixos-anywhere kexecs into the NixOS installer from whatever's running)
-- 4 storage drives + 1 boot SSD installed
+- 4× 1 TB disks in bays 0–3, PERC H710P Mini cross-flashed to IT mode (see [`TODO.md`](../../TODO.md), Before deployment). No boot SSD: everything lives on the four disks.
 - A workstation with Nix installed, holding this repo clone
 - Raspberry Pi backup host already set up (see [`hosts/backup/README.md`](../backup/README.md)) — needed for §10 (verify backups)
 - A [Tailscale account](https://login.tailscale.com)
@@ -14,7 +14,7 @@ Scope: the dual-Xeon main server running all user-facing services (Seafile, Vaul
 
 ## 1. Install NixOS via nixos-anywhere + disko
 
-Disk layout (GPT on `/dev/sda` + mdadm RAID 10 across `/dev/sdb..e`) is declared in [`hosts/main/disko.nix`](./disko.nix); the platform stub in [`hosts/main/hardware-configuration.nix`](./hardware-configuration.nix) is committed. Install is a single command from your workstation, plus a one-time setup of operator-managed files + agenix-encrypted secrets.
+Disk layout (on each of the four disks: an ESP, a member of the mdadm RAID 10 for `/`, and a member of the btrfs RAID 1 for `/mnt/data`) is declared in [`hosts/main/disko.nix`](./disko.nix); the platform stub in [`hosts/main/hardware-configuration.nix`](./hardware-configuration.nix) is committed. Install is a single command from your workstation, plus a one-time setup of operator-managed files + agenix-encrypted secrets.
 
 ### 1.1 Workstation prep — operator-managed files
 
@@ -81,13 +81,13 @@ cd ~/server_config && nix flake lock
 
 ### 1.3 Target prep — boot SSH-capable image
 
-Boot any Linux with SSH-as-root on the target. Verify disko's expected disk layout (`/dev/sda` boot SSD, `/dev/sdb..sde` RAID spinners) — disko will WIPE every disk listed:
+Boot any Linux with SSH-as-root on the target. List the four disks by ID — disko will WIPE every disk listed:
 
 ```bash
-lsblk
+ls -l /dev/disk/by-id/ | grep -v part   # four ata-ST1000DM010-... (or wwn-...) entries
 ```
 
-If device names differ, edit `hosts/main/disko.nix` on the workstation before installing.
+Put those four paths, in bay order, into `diskIds` in `hosts/main/disko.nix` on the workstation before installing. The `REPLACE-bay*` placeholders must not survive.
 
 ### 1.4 Stage main's host key for shipping
 
@@ -117,7 +117,10 @@ Nixos-anywhere kexecs into the NixOS installer, runs disko to partition + format
 ```bash
 ssh operator@<main-lan-ip>
 sudo passwd operator
-cat /proc/mdstat              # verify RAID 10 assembled healthy
+cat /proc/mdstat              # verify the `os` RAID 10 is [UUUU]
+sudo btrfs filesystem show /mnt/data   # 4 devices, none missing
+sudo btrfs filesystem df /mnt/data     # Data RAID1, Metadata RAID1C3
+for d in /sys/block/sd?/device/timeout; do cat $d; done   # 180 on all four
 ls /run/agenix/               # restic-env, acme-credentials, main-root-sshkey, tailscale-authkey
 ```
 
@@ -426,4 +429,38 @@ bootloader, or run:
 
 ```bash
 sudo nixos-rebuild switch --rollback
+```
+
+---
+
+## 13. Replacing a disk
+
+Each disk holds an ESP (`/boot1..4`), a member of the mdadm `os` array (`/`) and a member of the btrfs RAID 1 (`/mnt/data`). One dead disk:
+
+- `/` keeps running degraded; `mdadm` alerts on `home-smart`.
+- `/mnt/data` keeps running degraded until the next reboot. After a reboot it does **not** mount (no `degraded` option on purpose), Docker and the backups stay down, `btrfs-data-check` alerts on `home-smart`, and SSH + Tailscale are still up.
+
+Replace it (the new disk in the same bay; `sdX` = the new disk, `N` = its bay number + 1):
+
+```bash
+# 1. If /mnt/data is not mounted, mount it degraded for the rebuild
+sudo mount -o degraded,compress=zstd:3,noatime,subvol=@data /dev/disk/by-label/data /mnt/data
+
+# 2. Copy the partition table from a healthy disk, give it new GUIDs
+sudo sgdisk --replicate=/dev/sdX /dev/sdHEALTHY && sudo sgdisk -G /dev/sdX
+sudo sgdisk -c 1:bootN -c 2:osN -c 3:dataN /dev/sdX
+
+# 3. ESP
+sudo mkfs.vfat -F 32 /dev/disk/by-partlabel/bootN
+
+# 4. OS array
+sudo mdadm /dev/md/os --add /dev/disk/by-partlabel/osN
+
+# 5. Data array (devid of the missing disk: `btrfs filesystem show /mnt/data`)
+sudo btrfs replace start -B <missing-devid> /dev/disk/by-partlabel/dataN /mnt/data
+sudo btrfs balance start -dconvert=raid1,soft -mconvert=raid1c3,soft /mnt/data  # fold back any single-copy chunks written while degraded
+
+# 6. Update diskIds in hosts/main/disko.nix to the new by-id path, commit, rebuild
+#    (reinstalls GRUB onto the new ESP)
+sudo nixos-rebuild switch --flake .#main
 ```

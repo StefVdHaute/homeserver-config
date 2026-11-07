@@ -10,7 +10,7 @@ End-to-end walltime: **~3–4 h** for a first-timer, **~1.5 h** once you've done
 
 ### 1.1 Hardware
 
-- **Main:** dual-Xeon-ish, DDR3, 32–48 GB RAM. 250 GB boot SSD on `/dev/sda`. Four 1 TB spinners on `/dev/sdb..e` (mdadm RAID 10 + btrfs `@data` at `/mnt/data`).
+- **Main:** Dell PowerEdge R720, 2× Xeon E5-2620, 32 GB DDR3, UEFI boot. Four 1 TB disks (ST1000DM010) in bays 0–3 on the PERC H710P Mini **cross-flashed to IT mode** (do this first — see `TODO.md`, Before deployment). No boot SSD: each disk carries an ESP, a member of the mdadm RAID 10 for `/`, and a member of the btrfs RAID 1 for `/mnt/data`.
 - **Pi:** Raspberry Pi 4 (any RAM variant) with EEPROM bootloader ≥ 2020-10-28 (GPT + USB boot; any board bought 2021+ qualifies — older ones need one boot of the Raspberry Pi Imager "Bootloader → USB Boot" utility SD). ~240 GB SATA SSD in a USB adapter as OS drive (flashed on the workstation, no SD needed). Second external USB SSD/HDD for backup data. Both USB bridges need UAS/SAT SMART passthrough (verify with `sudo smartctl -a -d sat <dev>` once booted — opaque enclosures have no software workaround; replace).
 - **Workstation:** Linux with Nix installed, LAN reachable to both targets.
 
@@ -225,15 +225,14 @@ If the "Vendor Specific SMART Attributes" table appears for both, the `home-smar
 
 ### 5.1 Boot throwaway Linux on main (≈ 5 min)
 
-Same as 4.1 — any image with root SSH. Verify the disk layout matches disko:
+Any image with root SSH. List the disks by ID:
 
 ```bash
-lsblk
-# /dev/sda    — 250 GB (boot SSD)
-# /dev/sdb..e — 1 TB each (RAID 10 spinners)
+ls -l /dev/disk/by-id/ | grep -v part
+# four ata-ST1000DM010-... (or wwn-...) entries, 1 TB each
 ```
 
-If device names differ, edit `hosts/main/disko.nix` on the workstation before installing. Disko wipes every disk listed.
+Put those four paths, in bay order, into `diskIds` in `hosts/main/disko.nix` on the workstation before installing. Disko wipes every disk listed. If the disks don't show up, the controller is still in RAID mode.
 
 ### 5.2 Stage main's host SSH key for shipping
 

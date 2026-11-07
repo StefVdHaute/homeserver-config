@@ -23,24 +23,12 @@ let
     checkOpts = [ ];   # empty = structural check every run, no --read-data
     extraBackupArgs = [ "--compression" "max" ];
   };
-
-  # mdadm PROGRAM hook; argv: event, array, [device].
-  mdadmAlert = pkgs.writeShellApplication {
-    name = "mdadm-alert";
-    text = ''
-      event="$1"
-      array="''${2:-unknown}"
-      device="''${3:-N/A}"
-      ${ntfyNotify} home-smart 4 \
-        "mdadm: $event on $array" \
-        "Device: $device (host: homeserver)"
-    '';
-  };
 in
 
 {
   imports = [
     ./hardware-configuration.nix
+    ./storage.nix
     ../../modules/common.nix
     ../../modules/alerts.nix
   ];
@@ -108,32 +96,16 @@ in
   };
 
   # ============================================================
-  # Boot & Bootloader
+  # Boot
   # ============================================================
-  boot.loader.systemd-boot.enable = true;
-  boot.loader.efi.canTouchEfiVariables = true;
+  # Bootloader, RAID, scrub and swap live in ./storage.nix.
 
   # Cross-compile aarch64 (Pi backup host) from this x86_64 machine
   boot.binfmt.emulatedSystems = [ "aarch64-linux" ];
 
-  # Assembles the RAID 10 array from ./disko.nix at boot.
-  boot.swraid.enable = true;
-
-  # Route mdadm array events to ntfy home-smart.
-  boot.swraid.mdadmConf = ''
-    PROGRAM ${mdadmAlert}/bin/mdadm-alert
-  '';
-
   # ============================================================
   # Maintenance
   # ============================================================
-  # RAID 10 lets scrub repair /mnt/data; on the boot SSD it only reports errors.
-  services.btrfs.autoScrub = {
-    enable = true;
-    interval = "monthly";
-    fileSystems = [ "/" "/mnt/data" ];
-  };
-
   systemd.tmpfiles.rules = [
     "d /mnt/data/seafile 0750 operator users - -"
     "d /mnt/data/backups 0750 operator users - -"
@@ -179,7 +151,7 @@ in
   # ============================================================
   virtualisation.docker = {
     enable = true;
-    # Store Docker data on the RAID array, not the boot SSD
+    # Docker data on the btrfs RAID 1 data array, not the OS array
     daemon.settings = {
       data-root = "/mnt/data/docker";
       # 10MB × 3 = 30MB max log per container.

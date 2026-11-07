@@ -10,9 +10,12 @@ This file is the single source of truth for architecture, decisions, and the beh
 
 ### `homeserver` (main)
 
-- **Hardware:** Dual Xeon, DDR3, 32–48GB RAM
-- **Boot drive:** 250GB SSD
-- **Storage:** 4× 1TB spinning drives in mdadm RAID 10 (2TB usable), btrfs on top with the `@data` subvolume mounted at `/mnt/data` (zstd compression, noatime). Mdadm handles redundancy; btrfs handles checksumming + snapshots-if-needed.
+- **Hardware:** Dell PowerEdge R720 (service tag 9QYZF42), 2× Xeon E5-2620 (Sandy Bridge, 6C each), 32GB DDR3, UEFI boot. iDRAC7 Enterprise on the LAN for out-of-band power and console.
+- **Controller:** PERC H710P Mini cross-flashed to IT mode (LSI SAS2308, `mpt3sas`), so Linux sees plain disks. Until the flash is done the disks are invisible to mdadm/btrfs and SMART.
+- **Disks:** 4× 1TB Seagate ST1000DM010 (desktop drives, no ERC/TLER) in bays 0–3. No boot SSD; the onboard SATA ports stay free for one later. Addressed by `/dev/disk/by-id/` in `disko.nix`.
+- **Layout (per disk, identical):** 512M ESP (`/boot1..4`; GRUB `mirroredBoots` installs to all four, removable path, so any disk boots), 50G member of the mdadm RAID 10 `os` (btrfs `@nixos` at `/`, ~100GB), the rest as a member of a **btrfs RAID 1** (data `raid1`, metadata `raid1c3`, `@data` at `/mnt/data`, ~1.9TB, zstd, noatime). Swap is zram.
+- **Why split:** mdadm keeps `/` booting unattended with a dead disk (SSH/Tailscale stay up). btrfs's own RAID lets scrub *repair* bad blocks on `/mnt/data` — under mdadm btrfs could only detect them. Cost: after a reboot with a disk missing, `/mnt/data` doesn't mount until `mount -o degraded` by hand (deliberately not automatic); Docker and the restic jobs have `RequiresMountsFor=/mnt/data` so they never write to the OS array instead. A full data disk also can't fill `/`.
+- **Disk alerts:** mdadm `PROGRAM` hook and hourly `btrfs-data-check` (device error counters, missing device, unmounted `/mnt/data`) both post to ntfy `home-smart`; smartd covers SMART. The desktop disks get a 180s SCSI command timeout (udev) so a long bad-sector retry doesn't kick them out of the array. Disk replacement: `hosts/main/README.md` §13.
 - **Role:** Runs all user-facing services (Seafile, Vaultwarden, Joplin, Portainer, WUD) behind Caddy; originates restic backups.
 - **Config:** `hosts/main/`
 
@@ -61,7 +64,7 @@ This file is the single source of truth for architecture, decisions, and the beh
 ### Containerisation
 
 - Docker + Docker Compose
-- Docker data root: `/mnt/data/docker` (on RAID, not boot SSD)
+- Docker data root: `/mnt/data/docker` (on the btrfs RAID 1 data array, not the OS array)
 - Separate compose files per service
 - Images pinned to major versions where upstream publishes major tags (`caddy:2-alpine`, `ntfy:v2`, `postgres:16-alpine`, …); exact `x.y.z` where they don't (vaultwarden, portainer, joplin publish no major-only tags — WUD flags when the exact pins fall behind)
 
@@ -227,8 +230,9 @@ The deploy playbook's secrets-inventory section calls this out at install time �
 | `modules/spotify-adblock/package.nix` | Source build of the spotify-adblock LD_PRELOAD shim (not in nixpkgs). The workstation consumes it via `callPackage`; the flake exposes it as `packages.x86_64-linux.spotify-adblock` so `nix-update --flake spotify-adblock --version=stable` can bump it against upstream's GitHub releases. |
 | `modules/blender-mcp/package.nix` | Official Blender Lab MCP server (not in nixpkgs), built from the upstream git tag. Flake output `packages.x86_64-linux.blender-mcp` for `nix-update`. Also ships the matching Blender add-on, which the workstation exposes as a System extension via `BLENDER_SYSTEM_EXTENSIONS`. |
 | `hosts/main/configuration.nix` | Main host NixOS config (boot, RAID, Docker, SSH, Tailscale, firewall, auto-upgrade) |
-| `hosts/main/disko.nix` | Declarative disk layout: boot SSD (ESP + swap + btrfs `@nixos` at `/`) + mdadm RAID 10 over 4 spinners with btrfs `@data` at `/mnt/data` |
-| `hosts/main/hardware-configuration.nix` | Hand-authored platform stub: initrd modules (incl. raid10/md_mod), kvm-intel, Intel microcode |
+| `hosts/main/disko.nix` | Declarative disk layout over the 4 disks (by-id): per disk an ESP, a member of the mdadm RAID 10 `os` (btrfs `@nixos` at `/`), and a member of the btrfs RAID 1 (`@data` at `/mnt/data`) |
+| `hosts/main/storage.nix` | Boot and disk plumbing for that layout: GRUB `mirroredBoots` over the four ESPs, mdadm + btrfs RAID alerts, `RequiresMountsFor` gates, scrub, desktop-disk timeouts, zram |
+| `hosts/main/hardware-configuration.nix` | Hand-authored platform stub for the R720: initrd modules (mpt3sas, raid10/md_mod, btrfs), kvm-intel, IPMI modules, Intel microcode |
 | `hosts/main/Caddyfile` | Reverse proxy routes for all main-host services |
 | `hosts/main/.env.example` | Main-host environment variable template |
 | `hosts/main/compose/*.yml` | Docker Compose files (one per service) |
