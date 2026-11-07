@@ -273,6 +273,15 @@ in
     };
   };
 
+  # Pin the Pi's SSH host key so restic's SFTP connection (a non-interactive
+  # root job) doesn't stop at the unknown-host prompt. The pattern covers the
+  # MagicDNS name in RESTIC_REPOSITORY without putting the tailnet in git.
+  # Re-pin after reflashing the Pi's OS SSD.
+  programs.ssh.knownHosts.backupserver = {
+    hostNames = [ "backupserver" "backupserver.*.ts.net" ];
+    publicKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAID7h56XYOyD0T5ZcgOeu4KkJcie9+4zgL9HEaMDYeh0Z";
+  };
+
   # Failure notifier from modules/alerts.nix.
   systemd.services.restic-backups-docker-volumes.unitConfig.OnFailure =
     [ "ntfy-backup-failure@restic-backups-docker-volumes.service" ];
