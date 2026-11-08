@@ -1,11 +1,15 @@
 services:
   portainer:
-    image: portainer/portainer-ce:2.43.0
+    image: portainer/portainer-ce:2.45.3
     container_name: portainer
+    labels:
+      - wud.tag.include=^\d+\.\d+\.\d+$$
     restart: unless-stopped
     # Skips the first-run wizard, whose open /api/users/admin/init lets
     # anyone claim admin (docker.sock → host root).
-    command: ["--admin-password=${PORTAINER_ADMIN_PASSWORD_HASH}"]
+    # -H creates the local Docker environment on first start; with only
+    # --admin-password the setup wizard (which normally adds it) is skipped.
+    command: ["--admin-password=${PORTAINER_ADMIN_PASSWORD_HASH}", "-H", "unix:///var/run/docker.sock"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - portainer_data:/data

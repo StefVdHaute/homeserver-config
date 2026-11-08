@@ -66,7 +66,7 @@ This file is the single source of truth for architecture, decisions, and the beh
 - Docker + Docker Compose
 - Docker data root: `/mnt/data/docker` (on the btrfs RAID 1 data array, not the OS array)
 - Separate compose files per service
-- Images pinned to major versions where upstream publishes major tags (`caddy:2-alpine`, `ntfy:v2`, `postgres:16-alpine`, …); exact `x.y.z` where they don't (vaultwarden, portainer, joplin publish no major-only tags — WUD flags when the exact pins fall behind)
+- Images pinned to exact versions (`caddy:2.11.9-alpine`, `postgres:18.6-alpine`, `seafile-mc:14.0.9`, …), never floating tags, so WUD compares real versions. Each service has a `wud.tag.include` label limiting WUD to that image's release format (e.g. `^\d+\.\d+\.\d+$$`), because unfiltered it picks up `-rc`, `.dev`, Windows and branch tags as "updates". Major bumps stay manual: Postgres needs a dump/restore (or `pg_upgrade`), Seafile a config check against its upgrade notes.
 
 ### Services (all as Docker containers)
 
@@ -77,7 +77,7 @@ This file is the single source of truth for architecture, decisions, and the beh
 | Joplin Server | Self-hosted note sync (PostgreSQL backend) |
 | Caddy | Reverse proxy with automatic HTTPS |
 | Portainer | Container management web UI |
-| WUD | Container update monitoring (notify-only, no auto-updates); posts to ntfy `home-updates` |
+| WUD | Container update monitoring (notify-only, no auto-updates); built-in ntfy trigger to `home-updates`. WUD 9: login required (`admin` / `WUD_ADMIN_PASSWORD` from `.env`, bootstrapped on first start), SQLite store in the `wud_store` volume. |
 | Home Assistant | Home automation at `homeassistant.DOMAIN`. Bridge network behind Caddy (no host networking), so LAN auto-discovery (mDNS/SSDP) doesn't work and integrations are added by IP. A one-shot `homeassistant-init` container (runs on each `compose up`) seeds `configuration.yaml` and writes Caddy trust (`use_x_forwarded_for`, `172.16.0.0/12`) into the **stable** slot of `/config/.storage/http`; without it HA answers 400 behind the proxy. Not via an `http:` block in `configuration.yaml`: since 2026.11 HA migrates that once into a *pending* config that must be confirmed in the UI within 5 minutes, else it reverts and restarts, and afterwards ignores the YAML. Config in the `homeassistant_config` volume, so the restic `docker-volumes` job covers it. |
 | ntfy | Self-hosted push-notification server for operator alerts (tailnet-only) |
 | Grafana (in-band iDRAC view) | NixOS services in `hosts/main/monitoring.nix`, not containers. No Cockpit (removed 2026-11-08): it duplicated SSH + Grafana, added a password login on the web, and its service/storage/user changes drift from the NixOS config. OS tasks go over SSH; the BMC event log lands in `journalctl -u ipmiseld`. `grafana.DOMAIN`: "Server health (R720)" home dashboard (iDRAC summary: power, temps, fans, PSUs, sensor states, SEL, ECC, SMART, mdadm/btrfs) + "Node Exporter Full". Prometheus (9092, 90d) scrapes node, ipmi (local `/dev/ipmi0`, runs as root for freeipmi) and smartctl exporters; alerts go Alertmanager → alertmanager-ntfy → ntfy topic from the rule's `topic` label (`home-infra`/`home-smart`). Power-on and console while the OS is down stay iDRAC-only. |

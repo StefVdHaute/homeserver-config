@@ -1,18 +1,33 @@
 services:
   wud:
-    image: getwud/wud:8
+    image: getwud/wud:9.8.0
     container_name: wud
     restart: unless-stopped
+    labels:
+      - wud.tag.include=^\d+\.\d+\.\d+$$
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      # SQLite database (users, sessions, container state) since WUD 9.
+      - wud_store:/store
     environment:
       - TZ=${TZ}
-      - "WUD_TRIGGER_HTTP_NTFY_URL=http://ntfy:80/home-updates"
-      - "WUD_TRIGGER_HTTP_NTFY_METHOD=POST"
-      - "WUD_TRIGGER_HTTP_NTFY_SIMPLEBODY={{container.name}}: update {{container.updateKind.localValue}} → {{container.updateKind.remoteValue}}"
-      - "WUD_TRIGGER_HTTP_NTFY_BATCHBODY={{containers.length}} containers have updates available — see https://wud.${DOMAIN}"
+      # WUD 9 has no anonymous access. The admin account is created from
+      # these on first start; manage users afterwards in the UI
+      # (Configuration > Users). The password must not contain ':'.
+      - WUD_AUTH_ADMIN_USER=admin
+      - WUD_AUTH_ADMIN_PASSWORD=${WUD_ADMIN_PASSWORD}
+      # Fixed session secret (>= 32 chars); without it WUD derives one from
+      # its version and MAC address, so every upgrade logs everyone out.
+      - WUD_AUTH_SESSION_SECRET=${WUD_SESSION_SECRET}
+      # Update notifications to the local ntfy, topic home-updates.
+      - WUD_TRIGGER_NTFY_HOME_URL=http://ntfy:80
+      - WUD_TRIGGER_NTFY_HOME_TOPIC=home-updates
+      - WUD_TRIGGER_NTFY_HOME_PRIORITY=2
     networks:
       - proxy
+
+volumes:
+  wud_store:
 
 networks:
   proxy:

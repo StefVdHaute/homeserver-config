@@ -1,7 +1,9 @@
 services:
   ntfy:
-    image: binwiederhier/ntfy:v2
+    image: binwiederhier/ntfy:v2.37.2
     container_name: ntfy
+    labels:
+      - wud.tag.include=^v\d+\.\d+\.\d+$$
     restart: unless-stopped
     command: serve
     environment:

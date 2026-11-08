@@ -82,6 +82,8 @@ services:
     # No major-only tags upstream; WUD flags newer releases.
     image: ghcr.io/home-assistant/home-assistant:2026.11.0
     container_name: homeassistant
+    labels:
+      - wud.tag.include=^\d{4}\.\d+\.\d+$$
     restart: unless-stopped
     depends_on:
       homeassistant-init:

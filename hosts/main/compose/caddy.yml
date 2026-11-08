@@ -1,7 +1,9 @@
 services:
   caddy:
-    image: caddy:2-alpine
+    image: caddy:2.11.9-alpine
     container_name: caddy
+    labels:
+      - wud.tag.include=^2\.\d+\.\d+-alpine$$
     restart: unless-stopped
     ports:
       - "80:80"

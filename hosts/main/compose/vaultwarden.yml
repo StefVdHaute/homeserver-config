@@ -1,7 +1,9 @@
 services:
   vaultwarden:
-    image: vaultwarden/server:1.37.0
+    image: vaultwarden/server:1.37.5
     container_name: vaultwarden
+    labels:
+      - wud.tag.include=^\d+\.\d+\.\d+$$
     restart: unless-stopped
     volumes:
       - vaultwarden_data:/data

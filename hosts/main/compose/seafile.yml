@@ -1,7 +1,10 @@
 services:
   seafile-db:
-    image: mariadb:10.11
+    image: mariadb:10.11.19
     container_name: seafile-db
+    labels:
+      # 10.11 LTS, the version Seafile 14 ships with.
+      - wud.tag.include=^10\.11\.\d+$$
     restart: unless-stopped
     environment:
       - MYSQL_ROOT_PASSWORD=${SEAFILE_MYSQL_ROOT_PASSWORD}
@@ -26,16 +29,21 @@ services:
       retries: 10
 
   seafile-redis:
-    image: redis:7-alpine
+    image: redis:8.10.3-alpine
     container_name: seafile-redis
+    labels:
+      - wud.tag.include=^\d+\.\d+\.\d+-alpine$$
     restart: unless-stopped
     command: redis-server --requirepass ${SEAFILE_REDIS_PASSWORD}
     networks:
       - seafile-backend
 
   seafile:
-    image: seafileltd/seafile-mc:13.0-latest
+    # 14.0 was still a beta when adopted (2026-11-08); 13.0 stays maintained.
+    image: seafileltd/seafile-mc:14.0.9
     container_name: seafile
+    labels:
+      - wud.tag.include=^\d+\.\d+\.\d+$$
     restart: unless-stopped
     volumes:
       - /mnt/data/seafile:/shared

@@ -184,6 +184,8 @@ Edit `.env` and fill in all values:
 | `VAULTWARDEN_ADMIN_TOKEN` | Generate with `openssl rand -hex 32` |
 | `JOPLIN_DB_PASSWORD` | Strong random password |
 | `JOPLIN_ADMIN_PASSWORD` | Joplin admin password the `joplin-init` container will set on first startup, replacing the upstream default `admin`. Save in your password manager — login at `https://joplin.${DOMAIN}` afterwards is `admin@localhost` + this. |
+| `WUD_ADMIN_PASSWORD` | WUD admin password (user `admin`), applied when WUD first creates its user database. No `:` in it: WUD 9 can't log in with one. Later changes go through the WUD UI. |
+| `WUD_SESSION_SECRET` | At least 32 random characters. Keeps WUD logins valid across upgrades. |
 | `PORTAINER_ADMIN_PASSWORD_HASH` | **bcrypt hash** of your chosen Portainer admin password — Portainer reads it via `--admin-password` and skips the first-run init wizard. Generate once with `docker run --rm httpd:alpine htpasswd -nbB admin '<password>' \| cut -d: -f2`, save the plaintext in your password manager, paste the hash here. |
 
 Generate passwords quickly:
@@ -415,10 +417,12 @@ you don't need locally.
   decide when to pull new images.
 - **NixOS:** Auto-upgrades run daily at 04:30, but only after a successful
   Restic backup. If the backup fails, the upgrade is skipped.
-- **Major versions:** All images are pinned to their current major version
-  (e.g. `joplin/server:3`). Patch updates are safe to pull. Major version
-  bumps (e.g. 3 -> 4) require changing the tag in the compose file after
-  checking release notes.
+- **Versions:** every image is pinned to an exact version, and its
+  `wud.tag.include` label keeps WUD to real releases of that image (no
+  `-rc`, `.dev` or variant tags). To update, change the tag in the compose
+  file, commit, pull on main and `up -d` that stack. Read the release notes
+  for a major bump: Postgres can't open an older major's data (dump/restore),
+  Seafile majors change configuration.
 
 ### Daily schedule
 
@@ -429,13 +433,17 @@ you don't need locally.
 
 ### Manually updating a container
 
-After WUD shows an update is available:
+After WUD shows an update is available, bump the tag in
+`hosts/main/compose/<service>.yml`, commit and push, then on main:
 
 ```bash
-cd ~/server_config/hosts/main
+cd ~/server_config && git pull --ff-only && cd hosts/main
 docker compose --env-file .env -f compose/<service>.yml pull
 docker compose --env-file .env -f compose/<service>.yml up -d
 ```
+
+Never add `--remove-orphans` or run `down` here: every stack shares the
+Compose project `compose`, so the other stacks would count as orphans.
 
 ### Rolling back NixOS
 
