@@ -84,15 +84,23 @@ services:
           *) echo "unexpected HTTP $$code from joplin: $$(head -c 200 /tmp/session.json)" >&2; exit 1 ;;
         esac
         TOKEN=$$(jq -r '.id // empty' /tmp/session.json)
-        [ -n "$$TOKEN" ] || { echo "no session id in joplin's answer" >&2; exit 1; }
+        # User IDs are random strings, not 1.
+        USER_ID=$$(jq -r '.user_id // empty' /tmp/session.json)
+        [ -n "$$TOKEN" ] && [ -n "$$USER_ID" ] || { echo "no session/user id in joplin's answer" >&2; exit 1; }
         echo "logged in with default creds; rotating admin password..."
         curl -fsS -X PATCH \
           -H "Host: $$JOPLIN_HOST" \
           -H "X-Api-Auth: $$TOKEN" \
           -H "Content-Type: application/json" \
           -d "$$(jq -n --arg pw "$$JOPLIN_ADMIN_PASSWORD" '{password: $$pw}')" \
-          http://joplin:22300/api/users/1 >/dev/null
-        echo "admin password rotated"
+          "http://joplin:22300/api/users/$$USER_ID" >/dev/null
+        code=$$(curl -s -o /dev/null -w '%{http_code}' -X POST \
+          -H "Host: $$JOPLIN_HOST" \
+          -H "Content-Type: application/json" \
+          -d '{"email":"admin@localhost","password":"admin"}' \
+          http://joplin:22300/api/sessions)
+        [ "$$code" = 403 ] || { echo "default login still answers HTTP $$code after rotation" >&2; exit 1; }
+        echo "admin password rotated (default login now refused)"
 
 volumes:
   joplin_db:
