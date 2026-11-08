@@ -1,7 +1,13 @@
 services:
-  # Seeds configuration.yaml before Home Assistant's first start, and adds the
-  # reverse-proxy block to an existing one. Without `http:` trusting Caddy,
-  # Home Assistant answers 400 to every proxied request.
+  # Runs on each `docker compose up` of this stack (not on a plain container
+  # restart). Seeds configuration.yaml, and makes HA trust Caddy; without that HA answers 400 to every proxied
+  # request.
+  #
+  # Since 2026.11 HA ignores `http:` in configuration.yaml after a one-time
+  # migration into .storage/http, where it lands as a "pending" config that
+  # must be confirmed in the UI within 5 minutes or HA reverts it and
+  # restarts. Behind a proxy that confirmation is easy to miss, so the trust
+  # settings are written straight into the "stable" slot instead.
   homeassistant-init:
     image: alpine:3
     container_name: homeassistant-init
@@ -13,8 +19,9 @@ services:
       - -ec
       - |
         cfg=/config/configuration.yaml
+        store=/config/.storage/http
         if [ ! -e "$$cfg" ]; then
-          # Home Assistant's own default config, plus the proxy block.
+          # Home Assistant's own default config.
           cat > "$$cfg" <<'EOF'
         default_config:
 
@@ -30,16 +37,45 @@ services:
           touch /config/scripts.yaml /config/scenes.yaml
           echo "wrote default configuration.yaml"
         fi
-        if ! grep -q '^http:' "$$cfg"; then
-          cat >> "$$cfg" <<'EOF'
-
+        # An http: block here would be ignored, and flagged as deprecated.
+        if grep -q '^http:' "$$cfg"; then
+          echo "WARNING: remove the http: block from configuration.yaml; HA ignores it, see .storage/http" >&2
+        fi
+        apk add --no-cache --quiet jq >&2
         # Caddy on the Docker `proxy` network (hosts/main/compose/caddy.yml).
-        http:
-          use_x_forwarded_for: true
-          trusted_proxies:
-            - 172.16.0.0/12
-        EOF
-          echo "added http: reverse-proxy block"
+        proxy='{"use_x_forwarded_for": true, "trusted_proxies": ["172.16.0.0/12"]}'
+        mkdir -p /config/.storage
+        if [ ! -e "$$store" ]; then
+          # Fresh install: HA's default HTTP config plus the proxy trust,
+          # already stable and migrated (storage format 3, HA 2026.11).
+          jq -n --argjson p "$$proxy" --arg now "$$(date -u +%Y-%m-%dT%H:%M:%S+00:00)" '{
+            version: 3, minor_version: 1, key: "http",
+            data: {
+              stable: ({
+                server_port: 8123,
+                cors_allowed_origins: ["https://cast.home-assistant.io"],
+                login_attempts_threshold: -1,
+                ip_ban_enabled: true,
+                ssl_profile: "intermediate_v6",
+                use_x_frame_options: true,
+                created_at: $$now, error: null, error_message: null
+              } + $$p),
+              pending: null,
+              yaml_migration_done: true
+            }}' > "$$store"
+          echo "wrote .storage/http with proxy trust"
+        elif jq -e '.data.stable.use_x_forwarded_for == true' "$$store" >/dev/null; then
+          echo ".storage/http already trusts the proxy"
+        elif jq -e '.version == 3' "$$store" >/dev/null; then
+          # Existing install without proxy trust (e.g. a reverted pending
+          # config): put it in stable and drop the pending trial.
+          jq --argjson p "$$proxy" '.data.stable += $$p | .data.pending = null' "$$store" > "$$store.tmp"
+          mv "$$store.tmp" "$$store"
+          echo "added proxy trust to .storage/http"
+        else
+          # Unknown storage format after an HA upgrade: don't guess, but
+          # don't block HA from starting either.
+          echo "WARNING: .storage/http has an unknown format; proxy trust not set, HA will answer 400 behind Caddy" >&2
         fi
 
   homeassistant:
