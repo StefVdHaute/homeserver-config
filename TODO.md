@@ -53,7 +53,7 @@
 - [ ] aarch64 emulation — DEPLOY.md section 4 builds the Pi closure on the workstation, but the NixOS workstation has no `boot.binfmt.emulatedSystems = [ "aarch64-linux" ]`.
 - [ ] Install docs — DEPLOY.md has no workstation section (path: disko + `nixos-install --flake .#workstation`, like the Pi flash in section 4.1), and there is no `hosts/workstation/README.md`.
 - [ ] DEPLOY.md section 2.5 runs `nix flake lock` without `--extra-experimental-features 'nix-command flakes'`; Arch's nix.conf does not enable flakes, so the step fails on a fresh workstation.
-- [ ] `site` input — evaluating any host needs `/etc/nixos/site.nix`, though only main reads it. Decide whether it stays a flake-level input.
+- [x] `site` input — checked 2026-11-08: the backup host evaluates without `/etc/nixos/site.nix` (Nix only fetches the input when read). Workstation and main must keep identical copies, since `flake.lock` pins the hash.
 - [ ] Decide whether the workstation imports `modules/alerts.nix` (smartd -> ntfy for its NVMe).
 - [ ] Revisit `hyprpolkitagent` in place of `polkit_gnome` once nixpkgs ships a tagged hyprtoolkit-based release — 0.1.3 breaks the fingerprint flow (hyprpolkitagent#24).
 

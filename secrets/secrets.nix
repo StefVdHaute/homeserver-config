@@ -18,4 +18,5 @@ in {
   "operator-password.age".publicKeys = mainSecrets;
   "grafana-secret-key.age".publicKeys = mainSecrets;
   "grafana-admin-password.age".publicKeys = mainSecrets;
+  "grafana-oidc-secret.age".publicKeys = mainSecrets;
 }

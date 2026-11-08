@@ -55,7 +55,10 @@
   in {
     nixosConfigurations = {
       main = nixpkgs.lib.nixosSystem {
-        inherit specialArgs;
+        # tsidp comes from unstable (26.05's is too old); see hosts/main/tsidp.nix.
+        specialArgs = specialArgs // {
+          pkgsUnstable = nixpkgs-unstable.legacyPackages.x86_64-linux;
+        };
         system = "x86_64-linux";
         modules = [
           agenix.nixosModules.default

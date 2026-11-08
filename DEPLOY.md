@@ -59,6 +59,7 @@ sudo tee /etc/nixos/site.nix >/dev/null <<'EOF'
 {
   acmeDomain = "home.dedyn.io";       # your deSEC subdomain
   acmeEmail  = "you@example.com";     # Let's Encrypt contact
+  tailnet    = "example-tailnet.ts.net";  # MagicDNS suffix (tsidp, Grafana login)
 }
 EOF
 

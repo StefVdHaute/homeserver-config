@@ -2,7 +2,8 @@
 
 let
   # `siteConfig` is /etc/nixos/site.nix, shape:
-  #   { acmeDomain = "home.dedyn.io"; acmeEmail = "you@example.com"; }
+  #   { acmeDomain = "home.dedyn.io"; acmeEmail = "you@example.com";
+  #     tailnet = "example-tailnet.ts.net"; }
   site = siteConfig;
 
   # Shared options for every restic backup job.
@@ -39,6 +40,7 @@ in
     ./hardware-configuration.nix
     ./storage.nix
     ./monitoring.nix
+    ./tsidp.nix
     ../../modules/common.nix
     ../../modules/alerts.nix
   ];
@@ -284,13 +286,23 @@ in
       extraBackupArgs = resticCommon.extraBackupArgs ++ [ "--tag" "seafile-data" ];
       backupCleanupCommand = okOnSuccess "seafile-data";
     };
-    # /var/lib/AdGuardHome is a DynamicUser symlink into /var/lib/private;
-    # restic follows it. After a restore, stop adguardhome and `chown -R`
-    # the files to its current UID before starting it.
+    # DynamicUser services keep their state in /var/lib/private/<name>;
+    # /var/lib/<name> is only a symlink, and restic stores a symlink as a
+    # symlink, so back up the real path. After a restore systemd re-owns the
+    # files to the service's dynamic UID on its next start.
     adguard-state = resticCommon // {
-      paths = [ "/var/lib/AdGuardHome" ];
+      paths = [ "/var/lib/private/AdGuardHome" ];
       extraBackupArgs = resticCommon.extraBackupArgs ++ [ "--tag" "adguard-state" ];
       backupCleanupCommand = okOnSuccess "adguard-state";
+    };
+    # tsidp's node identity, OIDC signing key and registered clients
+    # (hosts/main/tsidp.nix). Without it a rebuild needs a new auth key and
+    # every app's OIDC client re-registered.
+    tsidp-state = resticCommon // {
+      paths = [ "/var/lib/private/tsidp" ];
+      exclude = [ "tailscaled.log*.txt" ];
+      extraBackupArgs = resticCommon.extraBackupArgs ++ [ "--tag" "tsidp-state" ];
+      backupCleanupCommand = okOnSuccess "tsidp-state";
     };
   };
 
@@ -310,6 +322,8 @@ in
     [ "ntfy-backup-failure@restic-backups-seafile-data.service" ];
   systemd.services.restic-backups-adguard-state.unitConfig.OnFailure =
     [ "ntfy-backup-failure@restic-backups-adguard-state.service" ];
+  systemd.services.restic-backups-tsidp-state.unitConfig.OnFailure =
+    [ "ntfy-backup-failure@restic-backups-tsidp-state.service" ];
 
   # Monthly deep check: reads and verifies a 10% sample of pack data over
   # SFTP, covering the whole repo statistically over ~10 months.

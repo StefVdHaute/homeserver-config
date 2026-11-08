@@ -27,6 +27,12 @@
 let
   domain = siteConfig.acmeDomain;
 
+  # tsidp (./tsidp.nix) on the tailnet; the tailnet name comes from site.nix.
+  idp = "https://idp.${siteConfig.tailnet}";
+  # tsidp rewrites GitHub logins in the email claim to
+  # <user>@github.<idp host> (realishEmail), so match that form.
+  grafanaAdminEmail = "StefVdHaute@github.idp.${siteConfig.tailnet}";
+
   ports = {
     adguard = config.services.adguardhome.port;
     grafana = 3001;
@@ -171,6 +177,8 @@ in
   age.secrets = {
     grafana-secret-key = { file = ../../secrets/grafana-secret-key.age; owner = "grafana"; };
     grafana-admin-password = { file = ../../secrets/grafana-admin-password.age; owner = "grafana"; };
+    # OIDC client secret from tsidp's dynamic client registration.
+    grafana-oidc-secret = { file = ../../secrets/grafana-oidc-secret.age; owner = "grafana"; };
   };
 
   # ============================================================
@@ -326,6 +334,30 @@ in
         disable_gravatar = true;
       };
       users.allow_sign_up = false;
+
+      # "Sign in with Tailscale" via tsidp. The local admin login stays
+      # available as a fallback (no auto_login, login form kept).
+      "auth.generic_oauth" = {
+        enabled = true;
+        name = "Tailscale";
+        # Creates the Grafana user on first OIDC login (the sign-up form
+        # stays off). Only autogroup:member can reach tsidp.
+        allow_sign_up = true;
+        # Registered with tsidp's /register; the ID isn't secret.
+        client_id = "86556cec5789edfcd1466130398317d1";
+        client_secret = "$__file{${config.age.secrets.grafana-oidc-secret.path}}";
+        scopes = "openid email profile";
+        auth_url = "${idp}/authorize";
+        token_url = "${idp}/token";
+        api_url = "${idp}/userinfo";
+        auth_style = "InHeader";        # registered as client_secret_basic
+        use_pkce = true;
+        email_attribute_path = "email";
+        login_attribute_path = "username";
+        name_attribute_path = "name";
+        role_attribute_path = "email == '${grafanaAdminEmail}' && 'Admin' || 'Viewer'";
+      };
+
       analytics = {
         reporting_enabled = false;
         check_for_updates = false;
