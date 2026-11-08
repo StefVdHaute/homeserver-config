@@ -53,7 +53,7 @@ This file is the single source of truth for architecture, decisions, and the beh
 ### Reverse Proxy
 
 - **Caddy** — single entry point for all web services (ports 80/443)
-- Subdomain-based routing (`seafile.DOMAIN`, `vaultwarden.DOMAIN`, etc.)
+- Subdomain-based routing (`seafile.DOMAIN`, `vaultwarden.DOMAIN`, etc.); `home.DOMAIN` is a static page linking to all of them
 - HTTPS via real Let's Encrypt certs (wildcard) issued and renewed by NixOS `security.acme` on the host, using a DNS-01 ACME challenge through the deSEC DNS plugin. Caddy reads `cert.pem`/`key.pem` from `/var/lib/acme/${DOMAIN}/` via a read-only bind mount; a `caddy-reload-certs.service` restarts Caddy after each renewal. See `hosts/main/README.md` §6.
 
 ### Remote Access
@@ -242,7 +242,8 @@ The deploy playbook's secrets-inventory section calls this out at install time �
 | `hosts/main/dashboards/server-health.nix` | The "Server health (R720)" Grafana dashboard as Nix, rendered to JSON by `monitoring.nix` |
 | `hosts/main/storage.nix` | Boot and disk plumbing for that layout: GRUB `mirroredBoots` over the four ESPs, mdadm + btrfs RAID alerts, `RequiresMountsFor` gates, scrub, desktop-disk timeouts, zram |
 | `hosts/main/hardware-configuration.nix` | Hand-authored platform stub for the R720: initrd modules (mpt3sas, raid10/md_mod, btrfs), kvm-intel, IPMI modules, Intel microcode |
-| `hosts/main/Caddyfile` | Reverse proxy routes for all main-host services |
+| `hosts/main/Caddyfile` | Reverse proxy routes for all main-host services, plus the static homepage at `home.DOMAIN` |
+| `hosts/main/homepage/index.html` | Static homepage linking to every service; Caddy's `templates` fills the domain in from `DOMAIN` |
 | `hosts/main/.env.example` | Main-host environment variable template |
 | `hosts/main/compose/*.yml` | Docker Compose files (one per service) |
 | `hosts/main/README.md` | Main-host setup guide |

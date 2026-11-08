@@ -248,6 +248,7 @@ Open these URLs (replace `DOMAIN` with your value from `.env`):
 
 | Service | URL |
 |---|---|
+| Homepage (links to everything) | `https://home.DOMAIN` |
 | Seafile | `https://seafile.DOMAIN` |
 | Vaultwarden | `https://vaultwarden.DOMAIN` |
 | Joplin | `https://joplin.DOMAIN` |

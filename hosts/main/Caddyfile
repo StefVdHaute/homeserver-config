@@ -22,6 +22,16 @@
 	}
 }
 
+# Static homepage linking to every service (hosts/main/homepage/).
+# `templates` fills in {{env "DOMAIN"}} in the links.
+home.{$DOMAIN} {
+	import acme_tls
+	import secure_headers
+	root * /srv/homepage
+	templates
+	file_server
+}
+
 # Seafile
 seafile.{$DOMAIN} {
 	import acme_tls

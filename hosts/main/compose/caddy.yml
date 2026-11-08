@@ -9,6 +9,7 @@ services:
       - "443:443/udp"
     volumes:
       - ../Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../homepage:/srv/homepage:ro
       - caddy_data:/data
       - caddy_config:/config
       # Wildcard cert from NixOS security.acme; DOMAIN must match site.acmeDomain.

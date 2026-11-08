@@ -1,0 +1,55 @@
+<!doctype html>
+<!--
+  Static homepage at home.DOMAIN, served by Caddy (hosts/main/Caddyfile).
+  Caddy's `templates` directive fills in {{env "DOMAIN"}} from the
+  container environment, so the links follow .env without a rebuild.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home</title>
+<style>
+  :root { color-scheme: light dark; --bg: #f4f5f7; --card: #fff; --fg: #1d2129; --muted: #667085; --accent: #2f6feb; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #14161a; --card: #1e2128; --fg: #e6e8eb; --muted: #98a2b3; --accent: #6ea8fe; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.4 system-ui, sans-serif; background: var(--bg); color: var(--fg); }
+  main { max-width: 960px; margin: 0 auto; padding: 2rem 1rem; }
+  h1 { font-size: 1.6rem; margin: 0 0 .25rem; }
+  h2 { font-size: .85rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 2rem 0 .75rem; }
+  p.sub { margin: 0; color: var(--muted); }
+  ul { list-style: none; padding: 0; margin: 0; display: grid; gap: .75rem; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+  a { display: block; height: 100%; padding: 1rem; border-radius: 10px; background: var(--card); color: inherit; text-decoration: none; border: 1px solid transparent; }
+  a:hover, a:focus-visible { border-color: var(--accent); }
+  a strong { display: block; color: var(--accent); }
+  a span { font-size: .875rem; color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Home</h1>
+  <p class="sub">{{env "DOMAIN"}}</p>
+
+  <h2>Apps</h2>
+  <ul>
+    <li><a href="https://seafile.{{env "DOMAIN"}}"><strong>Seafile</strong><span>Files and sync</span></a></li>
+    <li><a href="https://vaultwarden.{{env "DOMAIN"}}"><strong>Vaultwarden</strong><span>Passwords</span></a></li>
+    <li><a href="https://joplin.{{env "DOMAIN"}}"><strong>Joplin</strong><span>Notes sync</span></a></li>
+    <li><a href="https://homeassistant.{{env "DOMAIN"}}"><strong>Home Assistant</strong><span>Home automation</span></a></li>
+    <li><a href="http://backupserver:8080"><strong>Fluidd</strong><span>3D printer (K1C), on the Pi</span></a></li>
+  </ul>
+
+  <h2>Admin</h2>
+  <ul>
+    <li><a href="https://grafana.{{env "DOMAIN"}}"><strong>Grafana</strong><span>Server health</span></a></li>
+    <li><a href="https://cockpit.{{env "DOMAIN"}}"><strong>Cockpit</strong><span>System, journal, terminal</span></a></li>
+    <li><a href="https://portainer.{{env "DOMAIN"}}"><strong>Portainer</strong><span>Containers</span></a></li>
+    <li><a href="https://wud.{{env "DOMAIN"}}"><strong>WUD</strong><span>Container updates</span></a></li>
+    <li><a href="https://adguard.{{env "DOMAIN"}}"><strong>AdGuard Home</strong><span>DNS and ad blocking</span></a></li>
+    <li><a href="https://ntfy.{{env "DOMAIN"}}"><strong>ntfy</strong><span>Notifications</span></a></li>
+  </ul>
+</main>
+</body>
+</html>
