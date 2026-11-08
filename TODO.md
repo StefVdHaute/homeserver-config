@@ -6,7 +6,7 @@
 
 ## Services
 
-- [ ] Monitoring/alerting: written (`hosts/main/monitoring.nix`, Cockpit + Grafana + Prometheus + IPMI/SMART exporters + alerts to ntfy), not yet deployed or tested on the R720. Test: Grafana home dashboard fills (IPMI sensors, PSUs, SEL, SMART for all four disks), Cockpit logs in as operator and shows the md array, `journalctl -u ipmiseld` shows the SEL, a test alert reaches ntfy.
+- [ ] Monitoring/alerting: deployed 2026-11-08 (`hosts/main/monitoring.nix`, Grafana + Prometheus + IPMI/SMART exporters + alerts to ntfy; Cockpit removed). Tested: all 5 scrape targets up, 36/40 dashboard queries return data. Open: dashboard fixes (exporter 1.10.1 metric names `ipmi_dcmi_power_consumption_watts` / `ipmi_sel_logs_count`, RAID query needs `ignoring(state)`, ECC query labelset error), `IpmiSensorCritical` fires for absent "Presence" sensors (55, 84, 86, 87) and should exclude them, subscribe a phone to ntfy and send a test alert.
 - [ ] Log viewer (e.g. Dozzle)
 - [ ] Uptime monitoring (Uptime Kuma / Gatus) — ideally on the Pi so it probes main from outside and catches network-side failures main can't self-report
 - [ ] Photo management (Immich) — phone camera-roll backup, replaces Google Photos

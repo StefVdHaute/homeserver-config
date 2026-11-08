@@ -156,6 +156,9 @@ in
     # sudo password (secrets/operator-password.age). SSH login stays
     # key-only; this is only for sudo and the iDRAC console. Without it
     # operator has no password and sudo can never succeed.
+    # users.mutableUsers stays true (default): this only applies when the
+    # account is created. On an existing host use `passwd`; see
+    # hosts/main/README.md §1.6 if `passwd -S operator` shows L.
     hashedPasswordFile = config.age.secrets.operator-password.path;
   };
 

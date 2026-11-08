@@ -122,7 +122,15 @@ ssh operator@<main-lan-ip>
 # sudo asks for operator's password: its hash is in
 # secrets/operator-password.age (agenix; generate with `mkpasswd -m sha-512`).
 # Without it sudo can never succeed, since SSH login is key-only and root
-# login is off.
+# login is off. With users.mutableUsers = true it is only applied when the
+# account is created; `passwd -S operator` must show P, not L. If it shows L
+# (account existed before the secret, e.g. after a mount-mode reinstall),
+# set it once from the secret; operator is in the docker group:
+#   docker run --rm --privileged --pid=host alpine:3 nsenter -t 1 -m -u -i -n \
+#     /run/current-system/sw/bin/sh -c 'export PATH=/run/current-system/sw/bin;
+#     usermod -p "$(cat /run/agenix/operator-password)" operator'
+# Later password changes: plain `passwd` (re-encrypting the secret does
+# nothing on an existing host).
 cat /proc/mdstat              # verify the `os` RAID 10 is [UUUU]
 sudo btrfs filesystem show /mnt/data   # 4 devices, none missing
 sudo btrfs filesystem df /mnt/data     # Data RAID1, Metadata RAID1C3
@@ -212,7 +220,7 @@ Caddy picks up the cert files when started in §6. `caddy-reload-certs.service` 
 
 ## 6. Create the Docker network
 
-All services share a single network for Caddy to reach them. Give its bridge a fixed name: the host firewall opens the host-side services Caddy proxies to (AdGuard 3000, Grafana 3001, Cockpit 9090) only on `br-proxy` (see `monitoring.nix`):
+All services share a single network for Caddy to reach them. Give its bridge a fixed name: the host firewall opens the host-side services Caddy proxies to (AdGuard 3000, Grafana 3001) only on `br-proxy` (see `monitoring.nix`):
 
 ```bash
 docker network create -o com.docker.network.bridge.name=br-proxy proxy

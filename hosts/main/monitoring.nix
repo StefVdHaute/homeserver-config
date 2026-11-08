@@ -1,8 +1,5 @@
-# In-band replacement for the iDRAC web UI, tailnet-only behind Caddy:
+# In-band view of what the iDRAC reports, tailnet-only behind Caddy:
 #
-#   cockpit.DOMAIN  Cockpit: system overview, journal (incl. the BMC event
-#                   log via ipmiseld), services, storage (mdadm/btrfs),
-#                   networking, terminal, reboot/shutdown.
 #   grafana.DOMAIN  Grafana: "Server health (R720)" (iDRAC summary, sensors,
 #                   PSUs, power, event log, SMART, RAID, ECC) plus the
 #                   community "Node Exporter Full" dashboard.
@@ -11,13 +8,17 @@
 # and smartctl_exporter; its alerts go Alertmanager -> alertmanager-ntfy ->
 # the local ntfy (home-infra / home-smart).
 #
+# OS tasks (journal, services, storage, reboot) go over SSH. No Cockpit:
+# it duplicated SSH and Grafana, added a password login on the web, and its
+# service/storage/network/user changes drift from the NixOS config.
+#
 # What stays iDRAC-only: power-on and the console while the OS is down, BIOS
 # setup and virtual media. Keep the iDRAC on the LAN for those.
 #
-# Ports (all on the host): AdGuard 3000, Grafana 3001, Cockpit 9090,
-# Prometheus 9092, Alertmanager 9093, node 9100, ipmi 9290, smartctl 9633,
-# alertmanager-ntfy 8000. Caddy (container on the `proxy` network) reaches
-# Grafana, Cockpit and AdGuard via host.docker.internal; the firewall only
+# Ports (all on the host): AdGuard 3000, Grafana 3001, Prometheus 9092,
+# Alertmanager 9093, node 9100, ipmi 9290, smartctl 9633, alertmanager-ntfy
+# 8000. Caddy (container on the `proxy` network) reaches Grafana and
+# AdGuard via host.docker.internal; the firewall only
 # opens those ports on the proxy bridge (`br-proxy`, see README §6) and on
 # the trusted tailscale0.
 
@@ -29,7 +30,6 @@ let
   ports = {
     adguard = config.services.adguardhome.port;
     grafana = 3001;
-    cockpit = config.services.cockpit.port;
     prometheus = 9092;
     alertmanager = 9093;
     alertmanagerNtfy = 8000;
@@ -174,22 +174,6 @@ in
   };
 
   # ============================================================
-  # Cockpit (cockpit.DOMAIN)
-  # ============================================================
-  services.cockpit = {
-    enable = true;
-    showBanner = false;
-    allowed-origins = [ "https://cockpit.${domain}" ];
-    # Caddy terminates TLS and talks plain HTTP to Cockpit.
-    settings.WebService = {
-      ProtocolHeader = "X-Forwarded-Proto";
-      AllowUnencrypted = true;
-    };
-  };
-  # Backs Cockpit's Storage page (disks, mdadm, filesystems).
-  services.udisks2.enable = true;
-
-  # ============================================================
   # Exporters (localhost only; Prometheus is the only reader)
   # ============================================================
   services.prometheus.exporters = {
@@ -225,7 +209,7 @@ in
   };
 
   # Copies new BMC event-log entries into the journal, so they show up in
-  # Cockpit's Logs page and `journalctl -u ipmiseld` (iDRAC: Logs > SEL).
+  # `journalctl -u ipmiseld` (iDRAC: Logs > SEL).
   systemd.services.ipmiseld = {
     description = "Log IPMI System Event Log entries to the journal";
     wantedBy = [ "multi-user.target" ];
@@ -244,7 +228,7 @@ in
   services.prometheus = {
     enable = true;
     listenAddress = "127.0.0.1";
-    port = ports.prometheus;          # 9090 is Cockpit
+    port = ports.prometheus;          # not the 9090 default; kept from when Cockpit had it
     retentionTime = "90d";
     globalConfig = {
       scrape_interval = "30s";
@@ -377,6 +361,5 @@ in
   networking.firewall.interfaces.br-proxy.allowedTCPPorts = [
     ports.adguard
     ports.grafana
-    ports.cockpit
   ];
 }
