@@ -187,6 +187,8 @@ Edit `.env` and fill in all values:
 | `JOPLIN_ADMIN_PASSWORD` | Joplin admin password the `joplin-init` container will set on first startup, replacing the upstream default `admin`. Save in your password manager — login at `https://joplin.${DOMAIN}` afterwards is `admin@localhost` + this. |
 | `WUD_ADMIN_PASSWORD` | WUD admin password (user `admin`), applied when WUD first creates its user database. No `:` in it: WUD 9 can't log in with one. Later changes go through the WUD UI. |
 | `WUD_SESSION_SECRET` | At least 32 random characters. Keeps WUD logins valid across upgrades. |
+| `TSIDP_ISSUER`, `TSIDP_ADMIN_EMAIL` | tsidp's URL (`https://idp.<tailnet>`) and the email claim it sends for you (`<user>@github.idp.<tailnet>` for a GitHub login). The local admins of WUD, Seafile (`SEAFILE_ADMIN_EMAIL` uses the same value) and Portainer are named after it, so "Sign in with Tailscale" lands on them. |
+| `WUD_OIDC_*`, `VAULTWARDEN_SSO_*`, `SEAFILE_OAUTH_*` | OIDC clients registered once with tsidp: `curl -X POST https://idp.<tailnet>/register -d '{"client_name":"…","redirect_uris":["…"]}'`. Portainer's client is stored in Portainer's own settings (Settings → Authentication → OAuth), Grafana's in agenix. |
 | `PORTAINER_ADMIN_PASSWORD_HASH` | **bcrypt hash** of your chosen Portainer admin password — Portainer reads it via `--admin-password` and skips the first-run init wizard. Generate once with `docker run --rm httpd:alpine htpasswd -nbB admin '<password>' \| cut -d: -f2`, save the plaintext in your password manager, paste the hash here. |
 
 Generate passwords quickly:
