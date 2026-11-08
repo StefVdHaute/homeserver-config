@@ -186,6 +186,7 @@ Edit `.env` and fill in all values:
 | `JOPLIN_ADMIN_PASSWORD` | Joplin admin password the `joplin-init` container will set on first startup, replacing the upstream default `admin`. Save in your password manager — login at `https://joplin.${DOMAIN}` afterwards is `admin@localhost` + this. |
 | `WUD_ADMIN_PASSWORD` | WUD admin password (user `admin`), applied when WUD first creates its user database. No `:` in it: WUD 9 can't log in with one. Later changes go through the WUD UI. |
 | `WUD_SESSION_SECRET` | At least 32 random characters. Keeps WUD logins valid across upgrades. |
+| `TSIDP_AUTHKEY` | One-time Tailscale auth key for tsidp: tag `tag:tsidp`, not reusable, not ephemeral. Only read when tsidp first registers; empty it afterwards (the node identity lives in the `tsidp_data` volume). |
 | `PORTAINER_ADMIN_PASSWORD_HASH` | **bcrypt hash** of your chosen Portainer admin password — Portainer reads it via `--admin-password` and skips the first-run init wizard. Generate once with `docker run --rm httpd:alpine htpasswd -nbB admin '<password>' \| cut -d: -f2`, save the plaintext in your password manager, paste the hash here. |
 
 Generate passwords quickly:
@@ -265,6 +266,7 @@ Open these URLs (replace `DOMAIN` with your value from `.env`):
 | Portainer | `https://portainer.DOMAIN` |
 | WUD | `https://wud.DOMAIN` |
 | ntfy | `https://ntfy.DOMAIN` |
+| tsidp (OIDC login) | `https://idp.<tailnet>.ts.net` (its own tailnet device, not behind Caddy) |
 
 With the deSEC ACME setup from §5, certs are real Let's Encrypt ones and no browser warning appears. If you're on the `homeserver.local` LAN-only fallback, browsers will warn about Caddy's internal CA on first visit — accept the cert.
 

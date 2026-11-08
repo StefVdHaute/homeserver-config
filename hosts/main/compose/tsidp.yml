@@ -1,0 +1,30 @@
+services:
+  # Tailscale OIDC identity provider: apps log in with your Tailscale
+  # identity. Joins the tailnet as its own device, idp.<tailnet>.ts.net
+  # (tsnet, with its own Let's Encrypt cert), so it doesn't sit behind Caddy.
+  # Experimental upstream (pre-1.0): keep it pinned, and keep every app's
+  # local admin login as a fallback.
+  #
+  # Needs in the Tailscale access policy: tagOwners for tag:tsidp, and a
+  # grant with app "tailscale.com/cap/tsidp" (allow_admin_ui, allow_dcr) for
+  # autogroup:member. See hosts/main/README.md.
+  tsidp:
+    image: ghcr.io/tailscale/tsidp:v0.0.18
+    container_name: tsidp
+    restart: unless-stopped
+    labels:
+      - wud.tag.include=^v\d+\.\d+\.\d+$$
+    volumes:
+      # tsnet node state + registered OIDC clients.
+      - tsidp_data:/data
+    environment:
+      - TAILSCALE_USE_WIP_CODE=1   # required while tsidp is < 1.0
+      - TS_STATE_DIR=/data
+      - TS_HOSTNAME=idp
+      # Auth key with tag:tsidp, only used for the first registration; the
+      # node identity then lives in tsidp_data. Remove it from .env after
+      # the first start (an empty value is fine once registered).
+      - TS_AUTHKEY=${TSIDP_AUTHKEY:-}
+
+volumes:
+  tsidp_data:
