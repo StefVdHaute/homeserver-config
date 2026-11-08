@@ -60,6 +60,13 @@ wud.{$DOMAIN} {
 	reverse_proxy wud:3000
 }
 
+# Home Assistant (websockets are proxied automatically)
+homeassistant.{$DOMAIN} {
+	import acme_tls
+	import secure_headers
+	reverse_proxy homeassistant:8123
+}
+
 # ntfy (push notifications for operator alerts)
 ntfy.{$DOMAIN} {
 	import acme_tls

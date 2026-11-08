@@ -317,7 +317,7 @@ sudo nixos-rebuild switch --flake ~/server_config#main
 
 # Rest of the stack — joplin-init runs once after joplin's healthcheck
 # passes and rotates admin/admin → JOPLIN_ADMIN_PASSWORD.
-for svc in seafile vaultwarden joplin portainer ntfy wud; do
+for svc in seafile vaultwarden joplin portainer ntfy wud homeassistant; do
   docker compose --env-file .env -f compose/$svc.yml up -d
 done
 ```
@@ -329,7 +329,7 @@ done
 ### 6.1 HTTPS on every service
 
 ```bash
-for svc in seafile vaultwarden joplin portainer wud ntfy adguard; do
+for svc in seafile vaultwarden joplin portainer wud ntfy homeassistant adguard; do
   printf '%-12s ' "$svc"
   curl -fsSI "https://${svc}.<your-domain>/" | head -1
 done

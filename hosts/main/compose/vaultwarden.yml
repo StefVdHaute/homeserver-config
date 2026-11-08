@@ -13,7 +13,8 @@ services:
     networks:
       - proxy
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:80/alive || exit 1"]
+      # The image's own check (it has curl, not wget).
+      test: ["CMD", "/healthcheck.sh"]
       interval: 30s
       timeout: 10s
       retries: 3

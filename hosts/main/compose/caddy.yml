@@ -26,7 +26,9 @@ services:
       - proxy
     # Caddy admin API, on 2019 inside the container.
     healthcheck:
-      test: ["CMD-SHELL", "wget -q --spider http://localhost:2019/config/ || exit 1"]
+      # 127.0.0.1, not localhost: localhost resolves to ::1 first and the
+      # admin API only listens on IPv4 loopback.
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:2019/config/ || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

@@ -1,0 +1,76 @@
+services:
+  # Seeds configuration.yaml before Home Assistant's first start, and adds the
+  # reverse-proxy block to an existing one. Without `http:` trusting Caddy,
+  # Home Assistant answers 400 to every proxied request.
+  homeassistant-init:
+    image: alpine:3
+    container_name: homeassistant-init
+    restart: "no"
+    volumes:
+      - homeassistant_config:/config
+    command:
+      - sh
+      - -ec
+      - |
+        cfg=/config/configuration.yaml
+        if [ ! -e "$$cfg" ]; then
+          # Home Assistant's own default config, plus the proxy block.
+          cat > "$$cfg" <<'EOF'
+        default_config:
+
+        frontend:
+          themes: !include_dir_merge_named themes
+
+        automation: !include automations.yaml
+        script: !include scripts.yaml
+        scene: !include scenes.yaml
+        EOF
+          mkdir -p /config/themes
+          [ -e /config/automations.yaml ] || echo "[]" > /config/automations.yaml
+          touch /config/scripts.yaml /config/scenes.yaml
+          echo "wrote default configuration.yaml"
+        fi
+        if ! grep -q '^http:' "$$cfg"; then
+          cat >> "$$cfg" <<'EOF'
+
+        # Caddy on the Docker `proxy` network (hosts/main/compose/caddy.yml).
+        http:
+          use_x_forwarded_for: true
+          trusted_proxies:
+            - 172.16.0.0/12
+        EOF
+          echo "added http: reverse-proxy block"
+        fi
+
+  homeassistant:
+    # No major-only tags upstream; WUD flags newer releases.
+    image: ghcr.io/home-assistant/home-assistant:2026.11.0
+    container_name: homeassistant
+    restart: unless-stopped
+    depends_on:
+      homeassistant-init:
+        condition: service_completed_successfully
+    volumes:
+      - homeassistant_config:/config
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - TZ=${TZ}
+    # Bridge network behind Caddy like the other services: no host
+    # networking, so mDNS/SSDP auto-discovery doesn't reach the LAN;
+    # integrations are added by IP. USB radios (Zigbee/Z-Wave) would need a
+    # `devices:` entry.
+    networks:
+      - proxy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null http://127.0.0.1:8123/manifest.json || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+
+volumes:
+  homeassistant_config:
+
+networks:
+  proxy:
+    external: true
