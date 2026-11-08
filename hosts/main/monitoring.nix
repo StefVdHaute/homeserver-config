@@ -328,12 +328,21 @@ in
       };
       security = {
         secret_key = "$__file{${config.age.secrets.grafana-secret-key.path}}";
-        admin_user = "admin";
+        # The local admin is the same account as the tsidp login (matched by
+        # email, see auth.oauth_allow_insecure_email_lookup). Only applied
+        # when Grafana creates its database.
+        admin_user = "stefvdhaute";
+        admin_email = grafanaAdminEmail;
         admin_password = "$__file{${config.age.secrets.grafana-admin-password.path}}";
         cookie_secure = true;
         disable_gravatar = true;
       };
       users.allow_sign_up = false;
+
+      # Link a tsidp login to the existing user with the same email (the
+      # local admin). Safe here: tsidp derives the email from the Tailscale
+      # login and only tailnet members can reach it.
+      auth.oauth_allow_insecure_email_lookup = true;
 
       # "Sign in with Tailscale" via tsidp. The local admin login stays
       # available as a fallback (no auto_login, login form kept).

@@ -38,6 +38,45 @@ services:
     networks:
       - seafile-backend
 
+  # Keeps the tsidp OAuth block in seahub_settings.py (which lives in the data
+  # volume) in sync with this file. Runs on each `compose up`; needs an
+  # initialised Seafile, so on a brand-new install run `up` twice.
+  seafile-init:
+    image: alpine:3
+    container_name: seafile-init
+    restart: "no"
+    volumes:
+      - /mnt/data/seafile:/shared
+    command:
+      - sh
+      - -ec
+      - |
+        f=/shared/seafile/conf/seahub_settings.py
+        if [ ! -e "$$f" ]; then
+          echo "no seahub_settings.py yet (first start); run compose up again afterwards"
+          exit 0
+        fi
+        sed -i '/^# BEGIN tsidp-oauth/,/^# END tsidp-oauth/d' "$$f"
+        cat >> "$$f" <<'EOF'
+        # BEGIN tsidp-oauth (written by seafile-init, hosts/main/compose/seafile.yml; edits are overwritten)
+        import os as _os
+        if _os.environ.get('SEAFILE_OAUTH_CLIENT_ID'):
+            ENABLE_OAUTH = True
+            OAUTH_PROVIDER = 'tsidp'
+            OAUTH_CLIENT_ID = _os.environ['SEAFILE_OAUTH_CLIENT_ID']
+            OAUTH_CLIENT_SECRET = _os.environ['SEAFILE_OAUTH_CLIENT_SECRET']
+            OAUTH_REDIRECT_URL = 'https://%s/oauth/callback/' % _os.environ['SEAFILE_SERVER_HOSTNAME']
+            OAUTH_AUTHORIZATION_URL = _os.environ['TSIDP_ISSUER'] + '/authorize'
+            OAUTH_TOKEN_URL = _os.environ['TSIDP_ISSUER'] + '/token'
+            OAUTH_USER_INFO_URL = _os.environ['TSIDP_ISSUER'] + '/userinfo'
+            OAUTH_SCOPE = ['openid', 'email', 'profile']
+            # Links a login to the Seafile account with that email (the admin
+            # uses the tsidp email, SEAFILE_ADMIN_EMAIL in .env).
+            OAUTH_ATTRIBUTE_MAP = {'email': (True, 'email'), 'name': (False, 'name')}
+        # END tsidp-oauth
+        EOF
+        echo "tsidp OAuth block written"
+
   seafile:
     # 14.0 was still a beta when adopted (2026-11-08); 13.0 stays maintained.
     image: seafileltd/seafile-mc:14.0.9
@@ -67,10 +106,16 @@ services:
       - REDIS_HOST=seafile-redis
       - REDIS_PORT=6379
       - REDIS_PASSWORD=${SEAFILE_REDIS_PASSWORD}
+      # Read by the tsidp-oauth block in seahub_settings.py (seafile-init).
+      - TSIDP_ISSUER=${TSIDP_ISSUER}
+      - SEAFILE_OAUTH_CLIENT_ID=${SEAFILE_OAUTH_CLIENT_ID}
+      - SEAFILE_OAUTH_CLIENT_SECRET=${SEAFILE_OAUTH_CLIENT_SECRET}
     networks:
       - proxy
       - seafile-backend
     depends_on:
+      seafile-init:
+        condition: service_completed_successfully
       seafile-db:
         condition: service_healthy
       seafile-redis:

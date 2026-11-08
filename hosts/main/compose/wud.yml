@@ -14,11 +14,20 @@ services:
       # WUD 9 has no anonymous access. The admin account is created from
       # these on first start; manage users afterwards in the UI
       # (Configuration > Users). The password must not contain ':'.
-      - WUD_AUTH_ADMIN_USER=admin
+      # Same username as the tsidp login (OIDC usernameclaim = email), so
+      # "Sign in with Tailscale" lands on this admin account.
+      - WUD_AUTH_ADMIN_USER=${TSIDP_ADMIN_EMAIL}
       - WUD_AUTH_ADMIN_PASSWORD=${WUD_ADMIN_PASSWORD}
       # Fixed session secret (>= 32 chars); without it WUD derives one from
       # its version and MAC address, so every upgrade logs everyone out.
       - WUD_AUTH_SESSION_SECRET=${WUD_SESSION_SECRET}
+      # Login via tsidp (hosts/main/tsidp.nix); callback
+      # https://wud.${DOMAIN}/auth/oidc/tailscale/cb. Unknown users get
+      # read-only.
+      - WUD_PUBLIC_URL=https://wud.${DOMAIN}
+      - WUD_AUTH_OIDC_TAILSCALE_DISCOVERY=${TSIDP_ISSUER}/.well-known/openid-configuration
+      - WUD_AUTH_OIDC_TAILSCALE_CLIENTID=${WUD_OIDC_CLIENT_ID}
+      - WUD_AUTH_OIDC_TAILSCALE_CLIENTSECRET=${WUD_OIDC_CLIENT_SECRET}
       # Update notifications to the local ntfy, topic home-updates.
       - WUD_TRIGGER_NTFY_HOME_URL=http://ntfy:80
       - WUD_TRIGGER_NTFY_HOME_TOPIC=home-updates

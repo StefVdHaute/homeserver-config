@@ -11,6 +11,17 @@ services:
       - SIGNUPS_ALLOWED=${VAULTWARDEN_SIGNUPS_ALLOWED:-false}
       - ADMIN_TOKEN=${VAULTWARDEN_ADMIN_TOKEN}
       - DOMAIN=https://vaultwarden.${DOMAIN}
+      # SSO via tsidp (hosts/main/tsidp.nix). Only tailnet members can reach
+      # tsidp, so SSO may create the vault account even with SIGNUPS_ALLOWED
+      # off. tsidp sends no email_verified claim, hence ALLOW_UNKNOWN; with
+      # MATCH_EMAIL off that can't hijack an existing password account.
+      # The master password still unlocks the vault.
+      - SSO_ENABLED=true
+      - SSO_AUTHORITY=${TSIDP_ISSUER}
+      - SSO_CLIENT_ID=${VAULTWARDEN_SSO_CLIENT_ID}
+      - SSO_CLIENT_SECRET=${VAULTWARDEN_SSO_CLIENT_SECRET}
+      - SSO_SIGNUPS_MATCH_EMAIL=false
+      - SSO_ALLOW_UNKNOWN_EMAIL_VERIFICATION=true
       - TZ=${TZ}
     networks:
       - proxy
