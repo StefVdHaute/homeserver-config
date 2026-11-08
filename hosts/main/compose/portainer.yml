@@ -7,8 +7,12 @@ services:
     restart: unless-stopped
     # Skips the first-run wizard, whose open /api/users/admin/init lets
     # anyone claim admin (docker.sock → host root).
-    # -H creates the local Docker environment on first start; with only
-    # --admin-password the setup wizard (which normally adds it) is skipped.
+    # -H creates the local Docker environment, which the skipped setup
+    # wizard would otherwise add. Portainer only applies it in the same start
+    # that creates the admin from --admin-password (i.e. an empty
+    # portainer_data volume); on an existing instance it is silently ignored.
+    # Fix for an instance without an environment: remove the portainer
+    # container and the compose_portainer_data volume, then `up -d` again.
     command: ["--admin-password=${PORTAINER_ADMIN_PASSWORD_HASH}", "-H", "unix:///var/run/docker.sock"]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
