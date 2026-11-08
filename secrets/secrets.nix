@@ -19,4 +19,6 @@ in {
   "grafana-secret-key.age".publicKeys = mainSecrets;
   "grafana-admin-password.age".publicKeys = mainSecrets;
   "grafana-oidc-secret.age".publicKeys = mainSecrets;
+  "portainer-admin-password.age".publicKeys = mainSecrets;
+  "portainer-oidc-secret.age".publicKeys = mainSecrets;
 }
