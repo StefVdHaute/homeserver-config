@@ -40,7 +40,8 @@ services:
 
   # Keeps the tsidp OAuth block in seahub_settings.py (which lives in the data
   # volume) in sync with this file. Runs on each `compose up`; needs an
-  # initialised Seafile, so on a brand-new install run `up` twice.
+  # initialised Seafile, so on a brand-new install run `up -d` again after
+  # the first start, then `docker restart seafile` to load the block.
   seafile-init:
     image: alpine:3
     container_name: seafile-init
