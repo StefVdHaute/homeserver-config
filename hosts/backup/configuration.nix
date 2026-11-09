@@ -148,8 +148,8 @@
     openssh.authorizedKeys.keyFiles = [ operatorPubkeyPath ];
   };
 
-  # Restic SFTP target for main. sftp-server ignores the login shell, so
-  # nologin denies main's root key an interactive shell.
+  # Restic SFTP target for main. nologin denies main's root key a shell;
+  # the Match block in services.openssh serves its SFTP in-process.
   users.users.restic = {
     isSystemUser = true;
     group = "restic";
@@ -171,6 +171,11 @@
       PasswordAuthentication = false;
       PermitRootLogin = "no";
     };
+    # internal-sftp runs inside sshd, without the user's login shell.
+    extraConfig = ''
+      Match User restic
+        ForceCommand internal-sftp
+    '';
   };
 
   # ============================================================
