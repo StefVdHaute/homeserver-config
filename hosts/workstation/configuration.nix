@@ -132,10 +132,6 @@ in
   # file; do not materialize it via `environment.etc`.
 
   networking.hostName = "workstation";
-  networking.networkmanager.enable = true;
-
-  time.timeZone = "Europe/Brussels";
-  i18n.defaultLocale = "en_US.UTF-8";
 
   zramSwap = {
     enable = true;
@@ -399,30 +395,12 @@ in
 
   virtualisation.docker.enable = true;
 
-  services.openssh = {
-    enable = true;
-    settings = {
-      PasswordAuthentication = false;
-      PermitRootLogin = "no";
-    };
-  };
-
   # Authenticate once with `tailscale up`.
   services.tailscale = {
-    enable = true;
     useRoutingFeatures = "client";
     # Delegates control to stef so `tailscale up`/`status` need no sudo.
     extraSetFlags = [ "--operator=stef" ];
   };
-
-  networking.firewall = {
-    enable = true;
-    allowedTCPPorts = [ ];
-    allowedUDPPorts = [ 41641 ];
-    trustedInterfaces = [ "tailscale0" ];
-  };
-
-  nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
   nixpkgs.config.allowUnfreePredicate = pkg:
     builtins.elem (lib.getName pkg) [
@@ -437,13 +415,6 @@ in
       "steam-unwrapped"
       "steam-run"
     ];
-
-  nix.gc = {
-    automatic = true;
-    dates = "weekly";
-    options = "--delete-older-than 30d";
-  };
-  nix.optimise.automatic = true;
 
   services.btrfs.autoScrub = {
     enable = true;

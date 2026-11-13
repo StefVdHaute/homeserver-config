@@ -45,7 +45,7 @@
   #   - the bare mountpoint under it is root:root 0000 (activation script
   #     below), in case the automount is ever stopped.
   # The repo dir /mnt/backups/homeserver lives on the drive, created once
-  # at provisioning (README §4).
+  # at provisioning (DEPLOY.md 5.1).
   # ============================================================
   fileSystems."/mnt/backups" = {
     device = "/dev/disk/by-label/backup-data";
@@ -121,22 +121,10 @@
     fileSystems = [ "/" "/mnt/backups" ];
   };
 
-  # Garbage-collect old store paths weekly + hard-link duplicates.
-  nix.gc = {
-    automatic = true;
-    dates = "weekly";
-    options = "--delete-older-than 30d";
-  };
-  nix.optimise.automatic = true;
-
   # ============================================================
   # Networking
   # ============================================================
   networking.hostName = "backupserver";
-  networking.networkmanager.enable = true;
-
-  time.timeZone = "Europe/Brussels";
-  i18n.defaultLocale = "en_US.UTF-8";
 
   # ============================================================
   # Users
@@ -165,12 +153,7 @@
   # SSH — reachable via tailnet and LAN (firewall below enforces)
   # ============================================================
   services.openssh = {
-    enable = true;
     openFirewall = false;
-    settings = {
-      PasswordAuthentication = false;
-      PermitRootLogin = "no";
-    };
     # internal-sftp runs inside sshd, without the user's login shell.
     extraConfig = ''
       Match User restic
@@ -182,7 +165,6 @@
   # Tailscale — leaf node, no route advertising
   # ============================================================
   services.tailscale = {
-    enable = true;
     useRoutingFeatures = "none";
     authKeyFile = "/etc/tailscale/authkey";
   };
@@ -194,10 +176,6 @@
   #   everything else → drop
   # ============================================================
   networking.firewall = {
-    enable = true;
-    allowedTCPPorts = [ ];
-    allowedUDPPorts = [ 41641 ]; # Tailscale direct connections
-    trustedInterfaces = [ "tailscale0" ];
     extraCommands = ''
       iptables -A nixos-fw -s 192.168.128.0/23 -j nixos-fw-accept
       ip6tables -A nixos-fw -i end0 -s fe80::/10 -j nixos-fw-accept

@@ -128,24 +128,10 @@ in
     "d /mnt/data/backups 0750 operator users - -"
   ];
 
-  nix.gc = {
-    automatic = true;
-    dates = "weekly";
-    options = "--delete-older-than 30d";
-  };
-  nix.optimise.automatic = true;
-
   # ============================================================
   # Networking
   # ============================================================
   networking.hostName = "homeserver";
-  networking.networkmanager.enable = true;
-
-  # ============================================================
-  # Time & Locale
-  # ============================================================
-  time.timeZone = "Europe/Brussels";
-  i18n.defaultLocale = "en_US.UTF-8";
 
   # ============================================================
   # Users
@@ -160,14 +146,9 @@ in
     # operator has no password and sudo can never succeed.
     # users.mutableUsers stays true (default): this only applies when the
     # account is created. On an existing host use `passwd`; see
-    # hosts/main/README.md §1.6 if `passwd -S operator` shows L.
+    # hosts/main/README.md if `passwd -S operator` shows L.
     hashedPasswordFile = config.age.secrets.operator-password.path;
   };
-
-  # ============================================================
-  # Nix CLI — enable flakes + nix-command for interactive use on the host
-  # ============================================================
-  nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
   # ============================================================
   # Docker
@@ -187,21 +168,9 @@ in
   };
 
   # ============================================================
-  # SSH
-  # ============================================================
-  services.openssh = {
-    enable = true;
-    settings = {
-      PasswordAuthentication = false;
-      PermitRootLogin = "no";
-    };
-  };
-
-  # ============================================================
   # Tailscale
   # ============================================================
   services.tailscale = {
-    enable = true;
     useRoutingFeatures = "server";
     authKeyFile = config.age.secrets.tailscale-authkey.path;
   };
@@ -220,20 +189,15 @@ in
   # ============================================================
   # Firewall
   # ============================================================
+  # Tailscale's port and interface come from modules/common.nix.
   networking.firewall = {
-    enable = true;
     allowedTCPPorts = [
       22      # SSH
       53      # DNS (AdGuard Home)
       80      # HTTP  (Caddy)
       443     # HTTPS (Caddy)
     ];
-    allowedUDPPorts = [
-      53      # DNS (AdGuard Home)
-      41641   # Tailscale direct connections
-    ];
-    # Trust all traffic from Tailscale interface
-    trustedInterfaces = [ "tailscale0" ];
+    allowedUDPPorts = [ 53 ];   # DNS (AdGuard Home)
   };
 
   # ============================================================
