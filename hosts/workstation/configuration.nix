@@ -194,6 +194,28 @@ in
   programs.firefox = {
     enable = true;
     policies.SearchEngines.Default = "DuckDuckGo";
+
+    # uBlock Origin in every profile (also the one the Firefox DevTools MCP
+    # server starts), with its default lists plus the cookie notice lists.
+    # filterLists replaces the selection in the dashboard at each start.
+    policies.ExtensionSettings."uBlock0@raymondhill.net" = {
+      installation_mode = "normal_installed";
+      install_url = "https://addons.mozilla.org/firefox/downloads/latest/ublock-origin/latest.xpi";
+    };
+    policies."3rdparty".Extensions."uBlock0@raymondhill.net".toOverwrite.filterLists = [
+      "user-filters"
+      "ublock-filters"
+      "ublock-badware"
+      "ublock-privacy"
+      "ublock-quick-fixes"
+      "ublock-unbreak"
+      "easylist"
+      "easyprivacy"
+      "urlhaus-1"
+      "plowe-0"
+      "fanboy-cookiemonster"
+      "ublock-cookies-easylist"
+    ];
   };
 
   # Opens TCP+UDP 1714-1764 for discovery on the LAN.
