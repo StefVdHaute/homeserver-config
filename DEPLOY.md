@@ -1,487 +1,250 @@
-# DEPLOY.md — First-install playbook
+# First install
 
-Step-by-step procedure to bring both hosts up from nothing, written for an operator with no prior exposure to this repo. Architecture context: [`CLAUDE.md`](CLAUDE.md). Ongoing operations (rolling patches, etc.): each host's `README.md` under `hosts/`.
-
-End-to-end walltime: **~3–4 h** for a first-timer, **~1.5 h** once you've done it before. Most of the wall-clock is nix closure builds (aarch64 cross-build for Pi) and ACME propagation, not operator attention.
-
----
+Install the Pi first, then main: main's first upgrade waits for a backup to
+the Pi. Workstation commands run from the repo root. On the servers the clone
+is `~/server_config`.
 
 ## 1. Prerequisites
 
-### 1.1 Hardware
+- **Main:** PERC H710P Mini flashed to IT mode, so Linux sees four plain disks.
+- **Pi 4:** EEPROM bootloader 2020-10-28 or newer (GPT and USB boot). If it is
+  older, boot the Raspberry Pi Imager "Bootloader > USB Boot" SD image once.
+  Both USB bridges must pass SMART through (`-d sat`).
+- **Workstation:** Nix with flakes, and aarch64 emulation for the Pi closure
+  (`boot.binfmt.emulatedSystems = [ "aarch64-linux" ]` on NixOS).
+- **deSEC:** a subdomain (for example `home.dedyn.io`) and an API token.
+- **Tailscale:** one reusable auth key, not ephemeral, not pre-approved. Keys
+  expire after 90 days at most. For tsidp, the access policy needs the entries
+  that `hosts/main/tsidp.nix` lists.
 
-- **Main:** Dell PowerEdge R720, 2× Xeon E5-2620, 32 GB DDR3, UEFI boot. Four 1 TB disks (ST1000DM010) in bays 0–3 on the PERC H710P Mini **cross-flashed to IT mode** (do this first — see `TODO.md`, Before deployment). No boot SSD: each disk carries an ESP, a member of the mdadm RAID 10 for `/`, and a member of the btrfs RAID 1 for `/mnt/data`.
-- **Pi:** Raspberry Pi 4 (any RAM variant) with EEPROM bootloader ≥ 2020-10-28 (GPT + USB boot; any board bought 2021+ qualifies — older ones need one boot of the Raspberry Pi Imager "Bootloader → USB Boot" utility SD). ~240 GB SATA SSD in a USB adapter as OS drive (flashed on the workstation, no SD needed). Second external USB SSD/HDD for backup data. Both USB bridges need UAS/SAT SMART passthrough (verify with `sudo smartctl -a -d sat <dev>` once booted — opaque enclosures have no software workaround; replace).
-- **Workstation:** Linux with Nix installed, LAN reachable to both targets.
-
-### 1.2 Accounts
-
-- **deSEC** — free dynamic DNS with API for ACME DNS-01. Sign up at <https://desec.io>, register your subdomain (e.g. `home.dedyn.io`), generate API token at <https://desec.io/tokens>.
-- **Tailscale** — sign up at <https://tailscale.com>. Generate one **reusable** auth key (untick "Ephemeral", leave "Pre-approved" off so devices wait for manual approval).
-
----
-
-## 2. Workstation setup (≈ 30 min)
-
-### 2.1 Nix daemon + aarch64 emulation
+## 2. Keys and files outside git
 
 ```bash
-sudo systemctl enable --now nix-daemon
-
-# aarch64 emulation for cross-building the Pi closure (Arch package
-# names; adapt: Debian/Ubuntu have qemu-user-static + binfmt-support):
-sudo pacman -S --needed qemu-user-static qemu-user-static-binfmt
-sudo systemctl restart systemd-binfmt.service
-sudo tee -a /etc/nix/nix.conf <<< 'extra-platforms = aarch64-linux'
-sudo systemctl restart nix-daemon
-
-# Verify binfmt points at the STATIC qemu binary
-grep interpreter /proc/sys/fs/binfmt_misc/qemu-aarch64
-# expected: interpreter /usr/bin/qemu-aarch64-static
-```
-
-### 2.2 Clone the repo
-
-```bash
-cd ~ && git clone <repo-url> server_config && cd server_config
-```
-
-### 2.3 Operator-managed files
-
-Two files under `/etc/nixos/` (the `site.nix` flake input + main's host key), plus the public keys that live **in the repo** under `keys/` — a fork replaces those with its own:
-
-```bash
+# Per-site values. Must be identical on the workstation and on main.
 sudo install -d -m 0755 /etc/nixos
-
-# Per-site values (domain + ACME email) — deliberately outside git
-sudo install -m 0644 -o root -g root /dev/null /etc/nixos/site.nix
 sudo tee /etc/nixos/site.nix >/dev/null <<'EOF'
 {
-  acmeDomain = "home.dedyn.io";       # your deSEC subdomain
-  acmeEmail  = "you@example.com";     # Let's Encrypt contact
-  tailnet    = "example-tailnet.ts.net";  # MagicDNS suffix (tsidp, Grafana login)
+  acmeDomain = "home.dedyn.io";
+  acmeEmail  = "you@example.com";
+  tailnet    = "example-tailnet.ts.net";
 }
 EOF
 
-# Main's SSH host keypair — private ships at install via --extra-files;
-# pubkey is the agenix recipient for main's secrets.
+# Main's SSH host key pair. The public key is an agenix recipient.
 sudo ssh-keygen -t ed25519 -N "" -f /etc/nixos/main-host-key -C "main@homeserver"
 
-# Operator pubkey — committed to the repo, baked into both hosts'
-# `operator` user authorized_keys:
-cp ~/.ssh/id_ed25519.pub keys/operator.pub   # then edit the comment if you like
+# Operator public key: authorized on both servers, and an agenix recipient.
+cp ~/.ssh/id_ed25519.pub keys/operator.pub
 
-# Main's root SSH keypair — for restic SFTP into Pi. Private gets
-# encrypted into secrets/main-root-sshkey.age; PUBKEY goes into the repo:
+# Main's root key pair, for restic SFTP to the Pi.
 ssh-keygen -t ed25519 -N "" -f /tmp/main-root-key -C "main-root@homeserver"
 cp /tmp/main-root-key.pub keys/main-root.pub
-# (encrypt /tmp/main-root-key in §2.4, then shred it)
 ```
 
-Commit the `keys/` changes — git is their distribution channel; on-device rebuilds (auto-upgrade) depend on it.
+Commit `keys/`. Encrypt `/tmp/main-root-key` in section 3, then delete it.
 
-### 2.4 Encrypt the four agenix secrets
-
-Each opens `$EDITOR` — paste content on a single line where applicable, save, exit.
+## 3. Secrets
 
 ```bash
-cd ~/server_config/secrets
-AGENIX="nix run --extra-experimental-features 'nix-command flakes' github:ryantm/agenix --"
-
-# Restic repo URL + encryption password
-$AGENIX -i ~/.ssh/id_ed25519 -e restic.env.age
-# In editor:
-#   RESTIC_REPOSITORY=sftp:restic@backupserver.<your-tailnet>.ts.net:/mnt/backups/homeserver
-#   RESTIC_PASSWORD=<openssl rand -hex 32 — SAVE in your password manager OFF-SITE>
-
-# deSEC API token
-$AGENIX -i ~/.ssh/id_ed25519 -e acme-credentials.env.age
-# In editor:
-#   DESEC_TOKEN=<your-desec-token>
-
-# Main's root SSH private (paste BEGIN through END including trailing newline)
-sudo cat /etc/nixos/main-root-key
-$AGENIX -i ~/.ssh/id_ed25519 -e main-root-sshkey.age
-
-# Tailscale auth key (just the tskey-auth-... string, single line)
-$AGENIX -i ~/.ssh/id_ed25519 -e tailscale-authkey.age
-
-# operator's sudo password on main: one line, the output of `mkpasswd -m sha-512`
-$AGENIX -i ~/.ssh/id_ed25519 -e operator-password.age
+cd secrets
+AGENIX="nix run github:ryantm/agenix -- -i $HOME/.ssh/id_ed25519"
+$AGENIX -e <name>.age        # opens $EDITOR
 ```
 
-### 2.5 Lock + verify
+| File | Content |
+|---|---|
+| `restic.env.age` | `RESTIC_REPOSITORY=sftp:restic@backupserver.<tailnet>.ts.net:/mnt/backups/homeserver` and `RESTIC_PASSWORD=<openssl rand -hex 32>` |
+| `acme-credentials.env.age` | `DESEC_TOKEN=<token>` |
+| `main-root-sshkey.age` | The full content of `/tmp/main-root-key` |
+| `tailscale-authkey.age` | The `tskey-auth-...` string |
+| `operator-password.age` | Output of `mkpasswd -m sha-512`: the sudo password on main |
+| `grafana-secret-key.age`, `grafana-admin-password.age` | A random string each |
+| `portainer-admin-password.age` | The plaintext of the Portainer admin password |
+| `grafana-oidc-secret.age`, `portainer-oidc-secret.age` | Client secrets from tsidp (section 6.7). Encrypt a placeholder until then. |
+
+Save `RESTIC_PASSWORD` in a password manager that main does not host
+(`RECOVERY.md` says why).
+
+Then check that both servers evaluate:
 
 ```bash
-cd ~/server_config && nix flake lock
-
-nix build .#nixosConfigurations.main.config.system.build.toplevel --no-link --dry-run
-nix build .#nixosConfigurations.backup.config.system.build.toplevel --no-link --dry-run
-# Both should exit 0; "Git tree dirty" warning is fine.
+nix flake lock
+nix build --no-link --dry-run .#nixosConfigurations.main.config.system.build.toplevel
+nix build --no-link --dry-run .#nixosConfigurations.backup.config.system.build.toplevel
 ```
 
----
+## 4. Pi: flash the OS SSD on the workstation
 
-## 3. Order of operations
-
-**Pi first, main second.** Reasons:
-
-- Main's restic backups push to Pi at 03:00; main's `nixos-upgrade.service` `requires` the restic units, so main needs Pi reachable when its first daily upgrade runs.
-- Both configs are now self-contained at install: main's secrets (and root SSH key for SFTP) come via agenix; Pi's `restic` user authorizes main's pubkey via the `mainRootPubkey` flake input. **No paste roundtrip** required after either install.
-
----
-
-## 4. Pi install (≈ 30–45 min)
-
-The Pi's OS SSD is flashed **directly on the workstation** — plug the drive (in its USB adapter) into the workstation; no throwaway SD, no nixos-anywhere. The Pi 4 boots it via EEPROM USB boot.
-
-### 4.1 Build + flash the OS SSD (≈ 15–25 min)
-
-Confirm the drive's by-id path matches `device =` in `hosts/backup/disko.nix` (with two USB drives on the Pi, `/dev/sdX` is a race — by-id is authoritative):
+Connect the SSD in its USB adapter to the workstation. Its by-id path must
+match `device` in `hosts/backup/disko.nix`. The path includes the adapter, so
+keep the same adapter on the Pi.
 
 ```bash
 ls -l /dev/disk/by-id/ | grep usb
-```
 
-Build the closure, then format + install. Disko touches **only** the OS SSD — the backup data drive is deliberately not in `disko.nix`, so reinstalls can never wipe the restic repo:
-
-```bash
-cd ~/server_config
 nix build .#nixosConfigurations.backup.config.system.build.toplevel -o /tmp/backup-toplevel
-
-sudo nix run --extra-experimental-features 'nix-command flakes' \
-  github:nix-community/disko -- --mode destroy,format,mount --flake .#backup
-
-sudo nix shell --extra-experimental-features 'nix-command flakes' \
-  nixpkgs#nixos-install-tools -c \
+sudo nix run github:nix-community/disko -- --mode destroy,format,mount --flake .#backup
+sudo nix shell nixpkgs#nixos-install-tools -c \
   nixos-install --system "$(readlink -f /tmp/backup-toplevel)" \
   --root /mnt --no-root-passwd --no-channel-copy
-```
 
-The install's bootloader step (aarch64, runs under qemu binfmt from §2.1) populates `/boot` with extlinux + kernels **and** the Pi firmware/U-Boot chain — see the `installBootLoader` wrapper in `hosts/backup/hardware-configuration.nix`.
+# sudo on the Pi needs a password; SSH is key-only.
+sudo nix shell nixpkgs#nixos-install-tools -c nixos-enter --root /mnt -- passwd operator
 
-Set the operator password while the disk is still mounted (first-boot SSH is key-only and `sudo` needs a password):
-
-```bash
-sudo nix shell --extra-experimental-features 'nix-command flakes' \
-  nixpkgs#nixos-install-tools -c \
-  nixos-enter --root /mnt -- passwd operator
-```
-
-### 4.2 Seed operator files onto the SSD
-
-```bash
+# Files the Pi reads at run time.
 sudo install -d -m 0755 /mnt/etc/tailscale /mnt/etc/ntfy
+(cd secrets && $AGENIX -d tailscale-authkey.age) | sudo install -m 0600 /dev/stdin /mnt/etc/tailscale/authkey
+echo "https://ntfy.<domain>" | sudo install -m 0600 /dev/stdin /mnt/etc/ntfy/url
 
-cd ~/server_config/secrets
-$AGENIX -i ~/.ssh/id_ed25519 -d tailscale-authkey.age | sudo tee /mnt/etc/tailscale/authkey >/dev/null
-sudo chmod 0600 /mnt/etc/tailscale/authkey
-
-sudo tee /mnt/etc/ntfy/url >/dev/null <<< "https://ntfy.<your-domain>"
-sudo chmod 0600 /mnt/etc/ntfy/url
-
-cd ~/server_config && sudo umount -R /mnt
+sudo umount -R /mnt
 ```
 
-Tailscale auth keys expire after ≤ 90 days. If the one in `secrets/tailscale-authkey.age` is stale, generate a fresh reusable key in the [Tailscale admin](https://login.tailscale.com/admin/settings/keys), re-encrypt it (`$AGENIX -e tailscale-authkey.age`), and re-run the seed step.
+## 5. Pi: first boot
 
-### 4.3 Boot the Pi from USB
+1. Put both drives on the USB 3 ports, no SD card, and power on.
+2. Approve `backupserver` in the Tailscale admin console.
+3. `ssh operator@backupserver.<tailnet>.ts.net`
 
-Unplug the SSD from the workstation, plug both drives into the Pi's USB 3 (blue) ports, **no SD card inserted**, power on. The EEPROM's default boot order falls through to USB when no SD is present.
+### 5.1 Data drive (new drive only)
 
-- Board older than ~2021: flash the Raspberry Pi Imager "Misc utility images → Bootloader → USB Boot" image to any SD, boot it once (steady green LED = done), then retry.
-- Optional hardening: set `BOOT_ORDER=0xf14` (USB first) so a forgotten SD can never shadow the SSD.
-
-### 4.4 Approve on tailnet, SSH (≈ 5 min)
-
-The Pi tailscaled reads the seeded auth key on first boot and registers itself. Approve `backupserver` in the [Tailscale admin](https://login.tailscale.com/admin/machines), then:
+On the Pi. This is the only step that formats the data drive:
 
 ```bash
-ssh operator@backupserver.<your-tailnet>.ts.net
+git clone <repo-url> ~/server_config && cd ~/server_config/hosts/backup
+ls -l /dev/disk/by-id/ | grep usb          # set device= in disko-data.nix
+sudo nix run github:nix-community/disko -- --mode destroy,format,mount ./disko-data.nix
+sudo install -d -m700 -o restic -g restic /mnt/backups/homeserver
 ```
 
-### 4.5 Provision the backup data drive (first install only)
-
-The data drive is formatted **manually, on the Pi** — never as part of an OS install:
-
-```bash
-# On the Pi:
-git clone <your-repo-url> server_config && cd server_config/hosts/backup
-ls -l /dev/disk/by-id/ | grep usb        # find the data drive; set device= in disko-data.nix
-sudo nix run --extra-experimental-features 'nix-command flakes' \
-  github:nix-community/disko -- --mode destroy,format,mount ./disko-data.nix
-sudo install -d -m700 -o restic -g restic /mnt/backups/homeserver   # restic repo dir, on the drive
-```
-
-The runtime mount is by-label (`backup-data`) via `fileSystems` in `configuration.nix`, so this is a one-time step per drive.
-
-### 4.6 Verify SMART passthrough on both USB bridges
+### 5.2 SMART
 
 ```bash
 for d in /dev/disk/by-id/usb-*0:0; do echo "== $d"; sudo smartctl -a -d sat "$d" | head -40; done
 ```
 
-If the "Vendor Specific SMART Attributes" table appears for both, the `home-smart` alert path works. If not, replace the offending enclosure — opaque ones have no software workaround.
+Both drives must show the "Vendor Specific SMART Attributes" table. An
+enclosure that does not has no software fix: replace it. Add the data drive's
+by-id path to `alerts.smartd.devices` in `hosts/backup/configuration.nix`.
 
----
+## 6. Main
 
-## 5. Main install (≈ 60–90 min)
+### 6.1 Disks
 
-### 5.1 Boot throwaway Linux on main (≈ 5 min)
-
-Any image with root SSH. List the disks by ID:
+Boot any Linux with root SSH on main. Put the four by-id paths, in bay order,
+into `diskIds` in `hosts/main/disko.nix`. disko wipes every disk in that list.
 
 ```bash
 ls -l /dev/disk/by-id/ | grep -v part
-# four ata-ST1000DM010-... (or wwn-...) entries, 1 TB each
 ```
 
-Put those four paths, in bay order, into `diskIds` in `hosts/main/disko.nix` on the workstation before installing. Disko wipes every disk listed. If the disks don't show up, the controller is still in RAID mode.
+### 6.2 Install
 
-### 5.2 Stage main's host SSH key for shipping
+The host key must be on disk at first boot, or agenix cannot decrypt.
+`site.nix` must be there for the auto-upgrade to evaluate the flake.
 
 ```bash
-mkdir -p /tmp/main-extra/etc/ssh
-sudo install -m 0600 -o root -g root /etc/nixos/main-host-key /tmp/main-extra/etc/ssh/ssh_host_ed25519_key
-sudo install -m 0644 -o root -g root /etc/nixos/main-host-key.pub /tmp/main-extra/etc/ssh/ssh_host_ed25519_key.pub
+mkdir -p /tmp/main-extra/etc/ssh /tmp/main-extra/etc/nixos
+sudo install -m 0600 /etc/nixos/main-host-key     /tmp/main-extra/etc/ssh/ssh_host_ed25519_key
+sudo install -m 0644 /etc/nixos/main-host-key.pub /tmp/main-extra/etc/ssh/ssh_host_ed25519_key.pub
+sudo install -m 0644 /etc/nixos/site.nix          /tmp/main-extra/etc/nixos/site.nix
+
+nix run github:nix-community/nixos-anywhere -- \
+  --flake .#main --target-host root@<main-lan-ip> --extra-files /tmp/main-extra
+
+sudo rm -rf /tmp/main-extra
 ```
 
-This pre-deploys main's SSH host key so on first boot the on-disk key matches the agenix recipient — agenix can decrypt the secrets immediately.
+### 6.3 First login
 
-### 5.3 Run nixos-anywhere (≈ 15–20 min)
+Approve `homeserver` in the Tailscale admin console. Then:
 
 ```bash
-nix run --extra-experimental-features 'nix-command flakes' \
-  github:nix-community/nixos-anywhere -- \
-  --flake ~/server_config#main \
-  --target-host root@<main-lan-ip> \
-  --extra-files /tmp/main-extra
-
-rm -rf /tmp/main-extra
+ssh operator@homeserver.<tailnet>.ts.net
+cat /proc/mdstat           # RAID 10 healthy
+sudo ls /run/agenix/       # all secrets present
 ```
 
-### 5.4 Approve on tailnet, SSH, passwd
+Add a wildcard A record at deSEC: subname `*`, value from `tailscale ip -4`.
+
+### 6.4 Compose environment
 
 ```bash
-# Approve homeserver in the Tailscale admin first.
-ssh operator@homeserver.<your-tailnet>.ts.net
-# sudo uses the password whose hash is in secrets/operator-password.age
-cat /proc/mdstat              # verify RAID 10 healthy + resync clean
-sudo ls /run/agenix/          # restic-env, acme-credentials, main-root-sshkey, tailscale-authkey, operator-password
+git clone <repo-url> ~/server_config && cd ~/server_config/hosts/main
+cp .env.example .env && vim .env       # the comments say how to make each value
 ```
 
-### 5.5 Clone the repo on main
-
-The flake auto-upgrade pulls from GitHub, but the Compose stack needs the repo locally for `.env` + compose YAMLs:
+### 6.5 Certificate
 
 ```bash
-cd ~ && git clone <your-repo-url> server_config && cd server_config/hosts/main
+sudo journalctl -fu "acme-<domain>.service"     # wait for the certificate, 2-5 min
 ```
 
-### 5.6 Configure compose env file (≈ 5 min)
+`caddy-reload-certs.service` fails until Caddy exists. The rebuild below
+clears that.
+
+### 6.6 Containers
 
 ```bash
-cp .env.example .env
-vim .env       # fill in DOMAIN + all passwords (see hosts/main/README.md §4 for the variable table)
-```
-
-Generate strong passwords with `openssl rand -hex 32`. For `PORTAINER_ADMIN_PASSWORD_HASH`, run on the workstation:
-
-```bash
-docker run --rm httpd:alpine htpasswd -nbB admin '<your-portainer-password>' | cut -d: -f2
-# Save the plaintext password in your password manager; paste the hash output into .env
-```
-
-### 5.7 Wait for ACME (≈ 2–5 min)
-
-The ACME service was triggered automatically by §5.3's nixos-rebuild. deSEC propagation + Let's Encrypt validation takes a few minutes:
-
-```bash
-sudo journalctl -u acme-$(sudo nix eval --raw -f /etc/nixos/site.nix acmeDomain).service -f
-# Wait for "Obtained certificate" / "acme finished"
-ls /var/lib/acme/<your-domain>/      # cert.pem, key.pem, fullchain.pem, chain.pem
-```
-
-`caddy-reload-certs.service` will have logged a failure on first run because the Caddy container doesn't exist yet — expected, resolves after §5.8.
-
-### 5.8 Bring up Docker services (≈ 10 min)
-
-```bash
-# Fixed bridge name: the host firewall opens AdGuard/Grafana to Caddy on br-proxy only.
+# The firewall opens AdGuard and Grafana to Caddy on br-proxy only.
 docker network create -o com.docker.network.bridge.name=br-proxy proxy
 
-# Caddy first (other services route via the proxy network through it)
 docker compose --env-file .env -f compose/caddy.yml up -d
-
-# Re-rebuild so caddy-reload-certs stops failing
 sudo nixos-rebuild switch --flake ~/server_config#main
 
-# Rest of the stack — joplin-init runs once after joplin's healthcheck
-# passes and rotates admin/admin → JOPLIN_ADMIN_PASSWORD.
 for svc in seafile vaultwarden joplin portainer ntfy wud homeassistant; do
   docker compose --env-file .env -f compose/$svc.yml up -d
 done
 ```
 
----
+### 6.7 Single sign-on
 
-## 6. Post-install smoke tests (≈ 30 min)
-
-### 6.1 HTTPS on every service
+Register one client per app with tsidp. The callback URL of each app is in a
+comment next to its OIDC settings:
 
 ```bash
-for svc in seafile vaultwarden joplin portainer wud ntfy homeassistant adguard; do
-  printf '%-12s ' "$svc"
-  curl -fsSI "https://${svc}.<your-domain>/" | head -1
+curl -X POST https://idp.<tailnet>.ts.net/register \
+  -d '{"client_name":"<app>","redirect_uris":["<callback>"]}'
+```
+
+The WUD, Vaultwarden and Seafile clients go into `.env`. The Grafana and
+Portainer secrets go into their `.age` files; then rebuild main.
+
+### 6.8 AdGuard
+
+Complete the wizard at `https://adguard.<domain>` before 03:00, or the first
+backup of its state is empty. Keep the defaults, create the admin user, and
+pick the blocklists.
+
+## 7. Smoke tests
+
+```bash
+# Each line must be 200, 302 or 401, not a TLS error.
+for svc in home seafile vaultwarden joplin portainer wud ntfy homeassistant adguard grafana; do
+  printf '%-14s ' "$svc"; curl -sSI "https://$svc.<domain>/" | head -1
 done
-# Each prints 200 / 302 / 401 — not a TLS error.
+
+docker logs joplin-init                   # "admin password rotated"
+
+# First backups. The first one can take an hour.
+for job in docker-volumes seafile-data adguard-state tsidp-state; do
+  sudo systemctl start restic-backups-$job.service
+done
+ssh operator@backupserver.<tailnet>.ts.net ls /mnt/backups/homeserver/snapshots
+
+sudo systemctl start tailscale-healthcheck.service     # on both hosts; must exit 0
+sudo mdadm --monitor --scan --test --oneshot           # alert on home-smart
+curl -d "test" http://127.0.0.1:8085/home-infra        # alert on home-infra
 ```
 
-### 6.2 Joplin admin rotated
+Subscribe the phone to the four topics first (`hosts/main/README.md`).
 
-```bash
-docker logs joplin-init
-# Expect: "logged in with default creds; rotating admin password..." → "admin password rotated"
-```
+## 8. If a step fails
 
-Log in to `https://joplin.<your-domain>` with `admin@localhost` + your `JOPLIN_ADMIN_PASSWORD`.
-
-### 6.3 Portainer admin pre-set
-
-Visit `https://portainer.<your-domain>`, log in with `admin` + your chosen Portainer password (the bcrypt hash you put in `.env` was generated from this).
-
-### 6.4 AdGuard wizard
-
-Visit `https://adguard.<your-domain>` and complete the first-run wizard:
-- Admin interface: leave defaults.
-- DNS listener: port 53 on all interfaces.
-- Auth: create admin user + password.
-- Filters → DNS blocklists: pick a starter set (AdGuard DNS filter, AdAway).
-
-Then point devices at AdGuard (see `hosts/main/README.md` §9.2).
-
-### 6.5 First restic backup
-
-```bash
-sudo systemctl start restic-backups-docker-volumes.service
-sudo journalctl -u restic-backups-docker-volumes.service -f
-# Initial seeding takes ~30–60 min over SFTP/Tailscale
-```
-
-Verify on Pi:
-
-```bash
-ssh operator@backupserver.<your-tailnet>.ts.net \
-  ls /mnt/backups/homeserver/snapshots
-```
-
-Trigger the other two:
-
-```bash
-sudo systemctl start restic-backups-seafile-data.service
-sudo systemctl start restic-backups-adguard-state.service
-```
-
-### 6.6 Tailscale healthcheck (both hosts)
-
-```bash
-sudo systemctl start tailscale-healthcheck.service
-sudo journalctl -u tailscale-healthcheck.service | tail
-
-ssh operator@backupserver.<your-tailnet>.ts.net \
-  'sudo systemctl start tailscale-healthcheck.service && sudo journalctl -u tailscale-healthcheck.service | tail'
-```
-
-Both exit cleanly (BackendState=Running + Self.Online=true).
-
-### 6.7 ntfy phone hookup
-
-Install the ntfy app ([iOS](https://apps.apple.com/us/app/ntfy/id1625396347) / [Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy)). Add server `https://ntfy.<your-domain>`, subscribe to all four topics: `home-backup`, `home-smart`, `home-updates`, `home-infra`.
-
-Trigger test alerts:
-
-```bash
-# main
-curl -H "Priority: 3" -d "main → infra test" "http://127.0.0.1:8085/home-infra"
-
-# Pi
-ssh operator@backupserver.<your-tailnet>.ts.net \
-  'curl -H "Priority: 3" -d "pi → infra test" "$(tr -d "\n" < /etc/ntfy/url)/home-infra"'
-```
-
-Both should buzz the phone.
-
-### 6.8 mdadm alert path
-
-```bash
-sudo mdadm --monitor --scan --test --oneshot
-# Fires mdadm-alert → ntfy home-smart → phone.
-```
-
----
-
-## 7. Known gotchas
-
-- **`caddy-reload-certs.service` fails on first nixos-rebuild.** Expected: Caddy container doesn't exist yet. Bring Caddy up via compose, re-run rebuild, it succeeds. Real post-deploy failures here mean certs silently stop rotating (no `OnFailure` wired yet) — flag if seen.
-
-- **ACME DNS-01 propagation delay.** First cert issuance takes 2–5 min as deSEC publishes the TXT record and Let's Encrypt verifies. `sudo journalctl -u acme-<domain>.service -f` shows progress.
-
-- **AdGuard `DynamicUser` state dir empty on first restic-adguard-state run.** Restic snapshot may capture an empty `/var/lib/AdGuardHome` if the wizard hasn't been completed yet. Do §6.4 before the next 03:00, otherwise the first snapshot is unusable for restore.
-
-- **First aarch64 Pi build is mostly cache hits.** The kernel is pinned to mainline `linuxPackages` (channel-cached, unlike the deprecated/uncached rpi downstream kernels) precisely so neither the workstation (qemu) nor the Pi (auto-upgrade) ever compiles a kernel; what remains (initrd assembly, systemd units) builds in minutes via binfmt + qemu-user-static.
-
-- **Pi 4 EEPROM older than 2020-10-28 can't boot the SSD.** GPT + USB-boot support landed in that release. One boot of the Raspberry Pi Imager "Bootloader → USB Boot" utility SD fixes it permanently.
-
-- **Two SSDs share the Pi 4's ~1.2 A USB power budget.** Fine on the official 3 A PSU; USB resets in `dmesg` mean the data drive needs a powered hub.
-
-- **Caddy must be up before any other compose service is meaningful.** Services start without Caddy but are unreachable via HTTPS until Caddy's running.
-
-- **MagicDNS resolution for `backupserver`.** Main's nixos-upgrade gates on restic-to-Pi success; restic resolves `backupserver.<tailnet>.ts.net` via Tailscale MagicDNS. NixOS's Tailscale module sets `--accept-dns=true` by default.
-
-- **First-boot SSH is key-only.** `PasswordAuthentication = false` is live from first boot. If `/etc/nixos/operator.pub` on the install workstation is wrong or stale, you can't SSH in. Physical console is the fallback.
-
-- **Tailscale device awaits manual approval.** Both hosts try to register on first boot using the auth key but the key is not pre-approved — they sit in the admin console until you click "approve". Forgetting this looks like "tailscaled isn't working" but the device just isn't on the tailnet yet.
-
-- **Restic first-run is slow.** Initial seeding transfers full working set over SFTP/Tailscale. Expect 30–60 min for several GB. Subsequent daily runs are incremental and quick.
-
-- **agenix recipients tied to host SSH key.** If main's `/etc/ssh/ssh_host_ed25519_key` is regenerated (rebuild without `--extra-files`, or host reinstall), agenix can't decrypt and every secret-using service fails. The `--extra-files` step in §5.2 prevents this on first install. To rotate later: regenerate `/etc/nixos/main-host-key`, `nix flake lock`, run `agenix -r` from `secrets/` to re-encrypt to the new pubkey, ship the new private to main.
-
----
-
-## 8. Rollback playbook
-
-### During install
-
-- **nixos-anywhere fails partway through disko/install (main).** Target is in an indeterminate state. Cleanest: reboot into the original live medium and re-run nixos-anywhere — disko is destructive and re-runs are safe.
-- **Pi flash fails partway.** Re-run §4.1 from the workstation — the OS SSD gets re-wiped, and the data drive is untouchable by construction (not in `disko.nix`).
-- **nixos-rebuild switch fails post-install.** NixOS keeps the previous generation active. Fall back with `sudo nixos-rebuild switch --rollback`.
-
-### Post-install
-
-- **Docker compose pulled a broken image tag.** `docker compose -f compose/<svc>.yml down`, edit the tag back to the previous version, `up -d`.
-- **Bad commit auto-upgraded both hosts.** Main upgraded at 04:30, failed cleanly (NixOS rolls back). Pi at 05:30 is gated by the ntfy-reachability check — if main's upgrade bricked ntfy, Pi gates out. If the bad commit builds but breaks runtime, both follow. Mitigation: `git revert` on `main`, push — next upgrade cycle fixes itself.
-- **Restic repo corruption.** `restic check` flags it. Recovery needs another good copy. Currently the Pi is the only copy — flagged in TODO.md as the off-site-backup gap.
-- **agenix can't decrypt after host-key change.** Symptom: services fail because `/run/agenix/<name>` is missing. Fetch the new pubkey from main into `/etc/nixos/main-host-key.pub`, `nix flake update mainHostKey` (or full `nix flake lock`), then from `secrets/`: `agenix -i ~/.ssh/id_ed25519 -r` to rekey all `.age` files. Commit + push + rebuild.
-
----
-
-## 9. Secrets inventory
-
-| File | Lives on | Purpose | Loss impact |
-|---|---|---|---|
-| `/etc/nixos/site.nix` | Workstation | Domain + ACME email; flake input | Low — recreate from known values |
-| `/etc/nixos/operator.pub` | Workstation | Operator SSH pubkey, baked into both hosts' authorized_keys | Low — re-copy from `~/.ssh/id_ed25519.pub` |
-| `/etc/nixos/main-host-key{,.pub}` | Workstation | Main's SSH host keypair. Private ships at install via `--extra-files`; pubkey is the agenix recipient. | **High — lose the private and you can't decrypt main's secrets without rekeying via the operator key.** |
-| `/etc/nixos/main-root-key{,.pub}` | Workstation | Main's root SSH keypair. Private encrypted into agenix; pubkey is a flake input → Pi's restic authorized_keys. | Medium — regenerate, re-encrypt, re-push Pi config. |
-| `secrets/restic.env.age` | Repo (encrypted) | Restic repo URL + encryption password | **CATASTROPHIC** — `RESTIC_PASSWORD` loss = backups unrecoverable forever. |
-| `secrets/acme-credentials.env.age` | Repo (encrypted) | deSEC API token | Medium — revoke in deSEC dashboard, issue new, re-encrypt. |
-| `secrets/grafana-admin-password.age` | Repo (encrypted) | Grafana `admin` password (random) | Low — read it with `agenix -d`; re-encrypt a new one to rotate. |
-| `secrets/grafana-secret-key.age` | Repo (encrypted) | Grafana's `secret_key` (random) | Low — rotating it invalidates secrets Grafana stored in its DB (none are, everything is provisioned). |
-| `secrets/operator-password.age` | Repo (encrypted) | SHA-512 hash of operator's sudo password on main | Low — only applied when the account is created (`mutableUsers = true`); on a running host change it with `passwd`, and re-encrypt a new `mkpasswd -m sha-512` hash so a reinstall gets it too. Losing it means no sudo on main (SSH still works). |
-| `secrets/main-root-sshkey.age` | Repo (encrypted) | Main's root SSH private (for restic SFTP) | Medium — regenerate keypair, re-encrypt this file, update `/etc/nixos/main-root-key.pub` so Pi re-bakes the new pubkey. |
-| `secrets/tailscale-authkey.age` | Repo (encrypted) | Reusable Tailscale auth key | Low — generate a new one in the Tailscale admin, re-encrypt. |
-| `hosts/main/.env` | Main (gitignored, in repo clone) | Compose env: DOMAIN + service passwords + Portainer hash + Joplin admin password | Medium — recreate from password manager. |
-| `/etc/ntfy/url` | Pi | Main's ntfy base URL | Low — recreate from known value. |
-| `/etc/tailscale/authkey` | Pi (seeded onto the SSD at flash time) | Tailscale auth key (one-line) | Low — generate a new one (they expire ≤ 90 days), re-encrypt, re-seed. |
-
-**Off-site escrow priority:** save the **plaintext `RESTIC_PASSWORD`** to a password manager that's not hosted on main (Bitwarden cloud, 1Password, Proton Pass) when you generate it in §2.4. Without it, a complete loss of *both* main and your workstation = unrecoverable backups. See [`CLAUDE.md`](CLAUDE.md) § Disaster recovery for the full posture and recovery procedure.
+- **nixos-anywhere or the Pi flash stops partway:** run it again. Both are
+  destructive and safe to repeat. Neither can touch the Pi's data drive.
+- **A host does not appear on the tailnet:** it waits for approval, or the
+  auth key expired. For the Pi, write a new key to `/etc/tailscale/authkey`
+  and restart `tailscaled`.
+- **`sudo` on main rejects the password:** see `hosts/main/README.md`.
+- **USB resets in the Pi's `dmesg`:** two SSDs exceed the USB power budget.
+  Use a powered hub for the data drive.

@@ -19,7 +19,7 @@
 # Alertmanager 9093, node 9100, ipmi 9290, smartctl 9633, alertmanager-ntfy
 # 8000. Caddy (container on the `proxy` network) reaches Grafana and
 # AdGuard via host.docker.internal; the firewall only
-# opens those ports on the proxy bridge (`br-proxy`, see README §6) and on
+# opens those ports on the proxy bridge (`br-proxy`, see DEPLOY.md 6.6) and on
 # the trusted tailscale0.
 
 { config, lib, pkgs, siteConfig, ... }:
@@ -398,7 +398,7 @@ in
   # Firewall: Caddy -> host services
   # ============================================================
   # The `proxy` Docker network uses the fixed bridge name br-proxy
-  # (README §6). Packets from Caddy to host.docker.internal enter there.
+  # (DEPLOY.md 6.6). Packets from Caddy to host.docker.internal enter there.
   networking.firewall.interfaces.br-proxy.allowedTCPPorts = [
     ports.adguard
     ports.grafana

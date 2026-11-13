@@ -1,444 +1,30 @@
-# Main host (`homeserver`) — setup guide
+# homeserver: operation
 
-Scope: the main server (Dell PowerEdge R720, dual Xeon E5-2620) running all user-facing services (Seafile, Vaultwarden, Joplin, Portainer, WUD, ntfy) behind Caddy. For the Raspberry Pi backup target, see [`hosts/backup/README.md`](../backup/README.md).
+First install: [`DEPLOY.md`](../../DEPLOY.md). Loss and rollback:
+[`RECOVERY.md`](../../RECOVERY.md). The clone on this host is `~/server_config`.
 
-## Prerequisites
+## Services
 
-- Any Linux with SSH-as-root booted on the target (Ubuntu live USB, NixOS installer ISO, minimal cloud image — nixos-anywhere kexecs into the NixOS installer from whatever's running)
-- 4× 1 TB disks in bays 0–3, PERC H710P Mini cross-flashed to IT mode (see [`TODO.md`](../../TODO.md), Before deployment). No boot SSD: everything lives on the four disks.
-- A workstation with Nix installed, holding this repo clone
-- Raspberry Pi backup host already set up (see [`hosts/backup/README.md`](../backup/README.md)) — needed for §10 (verify backups)
-- A [Tailscale account](https://login.tailscale.com)
+`https://home.DOMAIN` links to all of them: `seafile`, `vaultwarden`,
+`joplin`, `homeassistant`, `portainer`, `wud`, `ntfy`, `grafana` and `adguard`,
+each at `<name>.DOMAIN`. tsidp is its own tailnet device at
+`https://idp.<tailnet>.ts.net`.
 
----
+Each app with "Sign in with Tailscale" keeps a local admin login as a
+fallback. Joplin's admin is `admin@localhost` with `JOPLIN_ADMIN_PASSWORD`.
 
-## 1. Install NixOS via nixos-anywhere + disko
+## Daily schedule
 
-Disk layout (on each of the four disks: an ESP, a member of the mdadm RAID 10 for `/`, and a member of the btrfs RAID 1 for `/mnt/data`) is declared in [`hosts/main/disko.nix`](./disko.nix); the platform stub in [`hosts/main/hardware-configuration.nix`](./hardware-configuration.nix) is committed. Install is a single command from your workstation, plus a one-time setup of operator-managed files + agenix-encrypted secrets.
-
-### 1.1 Workstation prep — operator-managed files
-
-These four files live outside git and are pulled in as flake path inputs (pure eval throughout). Create once per workstation:
-
-```bash
-sudo install -d -m 0755 /etc/nixos
-
-# Per-site values (domain + ACME email)
-sudo install -m 0644 -o root -g root /dev/null /etc/nixos/site.nix
-sudo tee /etc/nixos/site.nix >/dev/null <<'EOF'
-{
-  acmeDomain = "home.dedyn.io";       # your deSEC subdomain
-  acmeEmail  = "you@example.com";     # Let's Encrypt contact
-  tailnet    = "example-tailnet.ts.net";  # MagicDNS suffix (tsidp, Grafana login)
-}
-EOF
-
-# Operator pubkey — baked into both hosts' `operator` user authorized_keys
-sudo cp ~/.ssh/id_ed25519.pub /etc/nixos/operator.pub
-
-# Main's SSH host keypair — private gets shipped at install via
-# nixos-anywhere --extra-files; pubkey is the agenix recipient for
-# main's secrets.
-sudo ssh-keygen -t ed25519 -N "" -f /etc/nixos/main-host-key -C "main@homeserver"
-
-# Main's root SSH keypair — for restic SFTP into Pi. Private is
-# encrypted into secrets/main-root-sshkey.age; pubkey is a flake input
-# baked into Pi's restic authorized_keys.
-sudo ssh-keygen -t ed25519 -N "" -f /etc/nixos/main-root-key -C "main-root@homeserver"
-```
-
-### 1.2 Encrypt the agenix secrets
-
-Generate a deSEC API token at <https://desec.io/tokens> and a reusable Tailscale auth key in the Tailscale admin (untick "Ephemeral", leave "Pre-approved" unticked so devices wait for manual approval). Then encrypt four secrets — each opens `$EDITOR`; type/paste content, save, exit.
-
-```bash
-cd ~/server_config/secrets
-AGENIX="nix run --extra-experimental-features 'nix-command flakes' github:ryantm/agenix --"
-
-# Restic repo URL + encryption password
-$AGENIX -i ~/.ssh/id_ed25519 -e restic.env.age
-# In editor:
-#   RESTIC_REPOSITORY=sftp:restic@backupserver.<your-tailnet>.ts.net:/mnt/backups/homeserver
-#   RESTIC_PASSWORD=<openssl rand -hex 32 — SAVE in your password manager off-site>
-
-# deSEC API token
-$AGENIX -i ~/.ssh/id_ed25519 -e acme-credentials.env.age
-# In editor:
-#   DESEC_TOKEN=<your-desec-token>
-
-# Main's root SSH private key (paste the whole file including BEGIN/END)
-sudo cat /etc/nixos/main-root-key
-$AGENIX -i ~/.ssh/id_ed25519 -e main-root-sshkey.age
-
-# Tailscale auth key (just the tskey-auth-... string)
-$AGENIX -i ~/.ssh/id_ed25519 -e tailscale-authkey.age
-
-# operator's sudo password: one line, the output of `mkpasswd -m sha-512`
-$AGENIX -i ~/.ssh/id_ed25519 -e operator-password.age
-```
-
-Lock the new path inputs into `flake.lock`:
-
-```bash
-cd ~/server_config && nix flake lock
-```
-
-### 1.3 Target prep — boot SSH-capable image
-
-Boot any Linux with SSH-as-root on the target. List the four disks by ID — disko will WIPE every disk listed:
-
-```bash
-ls -l /dev/disk/by-id/ | grep -v part   # four ata-ST1000DM010-... (or wwn-...) entries
-```
-
-Put those four paths, in bay order, into `diskIds` in `hosts/main/disko.nix` on the workstation before installing. The `REPLACE-bay*` placeholders must not survive.
-
-### 1.4 Stage main's host key for shipping
-
-agenix on main decrypts using `/etc/ssh/ssh_host_ed25519_key`. Ship the pre-generated key so the on-disk key matches the agenix recipient:
-
-```bash
-mkdir -p /tmp/main-extra/etc/ssh
-sudo install -m 0600 -o root -g root /etc/nixos/main-host-key /tmp/main-extra/etc/ssh/ssh_host_ed25519_key
-sudo install -m 0644 -o root -g root /etc/nixos/main-host-key.pub /tmp/main-extra/etc/ssh/ssh_host_ed25519_key.pub
-```
-
-### 1.5 Run nixos-anywhere
-
-```bash
-nix run github:nix-community/nixos-anywhere -- \
-  --flake ~/server_config#main \
-  --target-host root@<main-lan-ip> \
-  --extra-files /tmp/main-extra
-
-rm -rf /tmp/main-extra        # cleanup post-install
-```
-
-Nixos-anywhere kexecs into the NixOS installer, runs disko to partition + format, installs the flake closure with main's pre-generated host key in place, and reboots. Expect ~15–20 minutes depending on network.
-
-### 1.6 First boot
-
-```bash
-ssh operator@<main-lan-ip>
-# sudo asks for operator's password: its hash is in
-# secrets/operator-password.age (agenix; generate with `mkpasswd -m sha-512`).
-# Without it sudo can never succeed, since SSH login is key-only and root
-# login is off. With users.mutableUsers = true it is only applied when the
-# account is created; `passwd -S operator` must show P, not L. If it shows L
-# (account existed before the secret, e.g. after a mount-mode reinstall),
-# set it once from the secret; operator is in the docker group:
-#   docker run --rm --privileged --pid=host alpine:3 nsenter -t 1 -m -u -i -n \
-#     /run/current-system/sw/bin/sh -c 'export PATH=/run/current-system/sw/bin;
-#     usermod -p "$(cat /run/agenix/operator-password)" operator'
-# Later password changes: plain `passwd` (re-encrypting the secret does
-# nothing on an existing host).
-cat /proc/mdstat              # verify the `os` RAID 10 is [UUUU]
-sudo btrfs filesystem show /mnt/data   # 4 devices, none missing
-sudo btrfs filesystem df /mnt/data     # Data RAID1, Metadata RAID1C3
-for d in /sys/block/sd?/device/timeout; do cat $d; done   # 180 on all four
-sudo ls /run/agenix/          # restic-env, acme-credentials, main-root-sshkey, tailscale-authkey, operator-password
-```
-
-Tailscale registers itself on first boot (via the agenix-decrypted auth key) and waits in the Tailscale admin for your manual approval click.
-
----
-
-## 2. Approve main on the tailnet
-
-Visit the [Tailscale admin](https://login.tailscale.com/admin/machines), find `homeserver` waiting for approval (because the auth key is reusable but not pre-approved), click approve. Subsequent SSH:
-
-```bash
-ssh operator@homeserver.<your-tailnet>.ts.net
-```
-
-`/mnt/data/{seafile,backups}` are pre-created with `operator:users` ownership by `systemd.tmpfiles`.
-
----
-
-## 3. Clone the repo on main
-
-The flake auto-upgrade pulls from GitHub directly, but the Compose stack needs the repo locally for the `.env` file + compose YAMLs:
-
-```bash
-cd ~ && git clone <your-repo-url> server_config && cd server_config
-```
-
----
-
-## 4. Configure environment
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and fill in all values:
-
-| Variable | What to set |
+| Time | Job |
 |---|---|
-| `DOMAIN` | Your deSEC subdomain (e.g. `home.dedyn.io`). MUST match `site.acmeDomain` in `/etc/nixos/site.nix` (§1.1). `homeserver.local` still works for LAN-only testing with internal CA certs. |
-| `SEAFILE_MYSQL_ROOT_PASSWORD` | Strong random password |
-| `SEAFILE_MYSQL_DB_PASSWORD` | Strong random password (Seafile DB user) |
-| `SEAFILE_ADMIN_EMAIL` | Your admin email |
-| `SEAFILE_ADMIN_PASSWORD` | Your Seafile admin password |
-| `SEAFILE_REDIS_PASSWORD` | Strong random password |
-| `JWT_PRIVATE_KEY` | Generate with `pwgen -s 40 1` (min 32 chars) |
-| `VAULTWARDEN_ADMIN_TOKEN` | Generate with `openssl rand -hex 32` |
-| `JOPLIN_DB_PASSWORD` | Strong random password |
-| `JOPLIN_ADMIN_PASSWORD` | Joplin admin password the `joplin-init` container will set on first startup, replacing the upstream default `admin`. Save in your password manager — login at `https://joplin.${DOMAIN}` afterwards is `admin@localhost` + this. |
-| `WUD_ADMIN_PASSWORD` | WUD admin password (user `admin`), applied when WUD first creates its user database. No `:` in it: WUD 9 can't log in with one. Later changes go through the WUD UI. |
-| `WUD_SESSION_SECRET` | At least 32 random characters. Keeps WUD logins valid across upgrades. |
-| `TSIDP_ISSUER`, `TSIDP_ADMIN_EMAIL` | tsidp's URL (`https://idp.<tailnet>`) and the email claim it sends for you (`<user>@github.idp.<tailnet>` for a GitHub login). The local admins of WUD, Seafile (`SEAFILE_ADMIN_EMAIL` uses the same value) and Portainer are named after it, so "Sign in with Tailscale" lands on them. |
-| `WUD_OIDC_*`, `VAULTWARDEN_SSO_*`, `SEAFILE_OAUTH_*` | OIDC clients registered once with tsidp: `curl -X POST https://idp.<tailnet>/register -d '{"client_name":"…","redirect_uris":["…"]}'`. Portainer's and Grafana's client secrets are in agenix; Portainer's OAuth settings are applied by the `portainer-oauth` service (`hosts/main/tsidp.nix`), which needs the plaintext admin password in `secrets/portainer-admin-password.age`. Scopes there are space-separated: tsidp rejects a comma list with `invalid_scope`. |
-| `PORTAINER_ADMIN_PASSWORD_HASH` | **bcrypt hash** of your chosen Portainer admin password — Portainer reads it via `--admin-password` and skips the first-run init wizard. Generate once with `docker run --rm httpd:alpine htpasswd -nbB admin '<password>' \| cut -d: -f2`, save the plaintext in your password manager, paste the hash here. |
+| 03:00 | The four restic jobs (`restic-backups-*.timer`) |
+| 04:30 | `nixos-upgrade`, only after `docker-volumes` and `seafile-data` succeed |
+| Monthly | `restic-check-deep`: reads 10% of the repository |
 
-Generate passwords quickly:
+## Update a container
 
-```bash
-openssl rand -hex 16
-```
-
----
-
-## 5. TLS certs via deSEC + ACME DNS-01
-
-NixOS `security.acme` issues + renews a wildcard cert for `*.${DOMAIN}`. The DNS-01 challenge runs through deSEC's API; the token is already encrypted in `secrets/acme-credentials.env.age` (decrypted at activation by agenix), so no file creation is needed on main.
-
-### 5.1 deSEC account + DNS records
-
-1. Create a free account at <https://desec.io>, confirm the email.
-2. Under "DNS" → "My domains" → "Create new": register the subdomain matching `site.acmeDomain` (e.g. `home.dedyn.io`).
-3. Add a wildcard A record pointing at `homeserver`'s Tailscale IP:
-   - Subname: `*`, Type: `A`, Value: `tailscale ip` output on main, TTL: 3600.
-
-### 5.2 Verify ACME issuance
-
-The first cert issuance triggered automatically when nixos-rebuild ran in §1.5; deSEC propagation + Let's Encrypt validation takes 2–5 min. Verify:
-
-```bash
-sudo journalctl -u acme-$(sudo nix eval --raw -f /etc/nixos/site.nix acmeDomain).service -f
-ls /var/lib/acme/<your-domain>/      # cert.pem, key.pem, fullchain.pem, chain.pem
-```
-
-Caddy picks up the cert files when started in §6. `caddy-reload-certs.service` restarts Caddy on each renewal — first nixos-rebuild logged it failed because Caddy isn't up yet; that resolves after §6.
-
----
-
-## 6. Create the Docker network
-
-All services share a single network for Caddy to reach them. Give its bridge a fixed name: the host firewall opens the host-side services Caddy proxies to (AdGuard 3000, Grafana 3001) only on `br-proxy` (see `monitoring.nix`):
-
-```bash
-docker network create -o com.docker.network.bridge.name=br-proxy proxy
-```
-
----
-
-## 7. Deploy services
-
-Caddy first (other services depend on the `proxy` network it uses), then re-run nixos-rebuild so `caddy-reload-certs.service` finds the container, then the rest:
-
-```bash
-cd ~/server_config/hosts/main
-
-# Caddy first
-docker compose --env-file .env -f compose/caddy.yml up -d
-
-# Re-rebuild so caddy-reload-certs stops failing
-sudo nixos-rebuild switch --flake ~/server_config#main
-
-# Rest of the stack (joplin-init runs once after joplin's healthcheck
-# passes and rotates admin/admin → JOPLIN_ADMIN_PASSWORD).
-for svc in seafile vaultwarden joplin portainer ntfy wud homeassistant; do
-  docker compose --env-file .env -f compose/$svc.yml up -d
-done
-```
-
----
-
-## 8. Verify services
-
-Open these URLs (replace `DOMAIN` with your value from `.env`):
-
-| Service | URL |
-|---|---|
-| Homepage (links to everything) | `https://home.DOMAIN` |
-| Seafile | `https://seafile.DOMAIN` |
-| Vaultwarden | `https://vaultwarden.DOMAIN` |
-| Joplin | `https://joplin.DOMAIN` |
-| Portainer | `https://portainer.DOMAIN` |
-| WUD | `https://wud.DOMAIN` |
-| ntfy | `https://ntfy.DOMAIN` |
-| tsidp (OIDC login) | `https://idp.<tailnet>.ts.net` (its own tailnet device, not behind Caddy; `hosts/main/tsidp.nix`) |
-
-With the deSEC ACME setup from §5, certs are real Let's Encrypt ones and no browser warning appears. If you're on the `homeserver.local` LAN-only fallback, browsers will warn about Caddy's internal CA on first visit — accept the cert.
-
----
-
-## 9. AdGuard Home (network-wide DNS + ad-blocking)
-
-AdGuard Home runs as a NixOS service (already enabled by §1.5's nixos-rebuild). DNS on `0.0.0.0:53` (tailnet + LAN reachable), forwards to Quad9 + Cloudflare over DoT.
-
-### 9.1 Initial setup wizard
-
-1. Visit `https://adguard.DOMAIN` (proxied by Caddy to the host's UI
-   on `127.0.0.1:3000`).
-2. Walk through the setup wizard:
-   - **Admin interface**: leave defaults (already bound correctly by Nix).
-   - **DNS listener**: leave at port 53 on all interfaces.
-   - **Authentication**: create an admin username + password (the
-     wizard stores them in AdGuard's state file; declared as
-     `mutableSettings = true` so the UI owns user management).
-3. Under **Filters → DNS blocklists**, pick a reasonable starting set
-   — the AdGuard DNS filter is a fine default; add AdAway + EasyList
-   for more aggressive blocking.
-
-### 9.2 Point devices at AdGuard
-
-Two complementary paths:
-
-**Tailnet clients (phones/laptops on Tailscale):** open the Tailscale
-admin console → **DNS** → set *Global nameservers* to
-`homeserver`'s Tailscale IP (from `tailscale ip` on the server). All
-tailnet peers will use AdGuard automatically.
-
-**LAN devices (smart TV, guest phones, IoT not on the tailnet):** in
-your router's DHCP config, hand out `homeserver`'s LAN IP as the
-primary DNS server. Devices will pick it up on DHCP renewal.
-
-### 9.3 Verify
-
-On a device using AdGuard:
-
-```bash
-# Should show AdGuard as the resolver, and a blocked domain as 0.0.0.0
-dig doubleclick.net @<homeserver-ip>
-```
-
-The AdGuard UI's **Query log** shows every query in real-time; great
-for debugging when a site breaks ("what did it try to reach?").
-
-### 9.4 Troubleshooting
-
-- **AdGuard won't start / port 53 conflict** — another service on main
-  is bound to 53. Unlikely with our config (NetworkManager doesn't
-  listen on 53 by default), but check `sudo ss -tulpn | grep :53`.
-- **A site stops working after enabling a filter** — check the AdGuard
-  query log for blocked domains on that site; whitelist via the UI.
-- **Tailscale peers still using old DNS** — they cache the config.
-  Toggle Tailscale off/on once; or run `tailscale set --accept-dns=true`.
-
----
-
-## 10. Verify backups
-
-Prerequisite: the `backupserver` Pi is already running and reachable via Tailscale (see [`hosts/backup/README.md`](../backup/README.md)). All backup wiring (restic env, main's root SSH key, ACME credentials) is already in place via agenix from §1.2.
-
-The three jobs (`restic-backups-docker-volumes.timer`, `restic-backups-seafile-data.timer`, `restic-backups-adguard-state.timer`) fire daily at 03:00 + 30m randomized delay. Trigger the first run manually:
-
-```bash
-systemctl list-timers 'restic-backups-*'
-
-sudo systemctl start restic-backups-docker-volumes.service
-sudo journalctl -u restic-backups-docker-volumes.service -f
-# Initial seeding takes ~30–60 min over SFTP/Tailscale
-```
-
-Verify the snapshot landed on the Pi:
-
-```bash
-ssh operator@backupserver.<your-tailnet>.ts.net \
-  ls /mnt/backups/homeserver/snapshots
-```
-
-Then trigger the other two jobs:
-
-```bash
-sudo systemctl start restic-backups-seafile-data.service
-sudo systemctl start restic-backups-adguard-state.service
-```
-
-On success each job sends a **silent** ntfy ping (Priority 1) to `home-backup`. On failure, the templated `ntfy-backup-failure@.service` fires via `OnFailure` with an **audible** alert; `journalctl -u restic-backups-<tag>.service` for details.
-
-**Off-site key escrow:** when you generated `RESTIC_PASSWORD` in §1.2, you saved it to your password manager. Verify that's still true now — without it, a complete loss of both main and your workstation = unrecoverable backups. See `CLAUDE.md` § Disaster recovery.
-
----
-
-## 11. Connect your devices
-
-### Seafile desktop sync
-
-1. Install the [Seafile desktop client](https://www.seafile.com/en/download/)
-2. Server URL: `https://seafile.DOMAIN`
-3. Log in with your admin credentials
-4. Choose libraries to sync
-
-### Vaultwarden
-
-1. Install Bitwarden on your devices
-2. Before logging in, tap the gear icon and set the server URL to
-   `https://vaultwarden.DOMAIN`
-3. Create an account or log in
-
-### Joplin
-
-1. In Joplin, go to Settings > Synchronisation
-2. Set target to "Joplin Server"
-3. Server URL: `https://joplin.DOMAIN`
-4. Admin login: `admin@localhost` + the `JOPLIN_ADMIN_PASSWORD` you set in `.env` (the `joplin-init` container rotated the upstream default at first compose-up).
-
-### Seafile server-only files
-
-Files uploaded via the web UI are stored on the server without
-syncing to your desktop. Create a library and don't sync it to
-any client — use this for large archives, media, or anything
-you don't need locally.
-
-### ntfy (push notifications for operator alerts)
-
-1. Install the ntfy app ([iOS](https://apps.apple.com/us/app/ntfy/id1625396347) / [Android](https://play.google.com/store/apps/details?id=io.heckel.ntfy)).
-2. Add your server in the app: tap the "+" button → "Subscribe to topic",
-   enter the topic name (e.g. `home-backup`), then use the three-dot menu
-   to set the server to `https://ntfy.DOMAIN`.
-3. Subscribe to all four operator topics:
-   - `home-backup` — restic backup success (silent) and failure (audible).
-   - `home-smart` — SMART disk alerts from both hosts.
-   - `home-updates` — WUD container-update notifications.
-   - `home-infra` — Pi host-health alerts (nixos-upgrade / mount / tailscaled failures).
-   Each topic can be muted independently in the app.
-4. No login or token is required — the ntfy server is reachable only
-   over Tailscale, so tailnet membership is the authentication.
-
----
-
-## 12. Updates
-
-### How updates work
-
-- **Docker containers:** WUD (What's Up Docker) monitors all containers and
-  shows available updates in its dashboard at `https://wud.DOMAIN`. New
-  updates also push a notification to ntfy's `home-updates` topic so you
-  don't have to keep the dashboard open. WUD does not auto-update — you
-  decide when to pull new images.
-- **NixOS:** Auto-upgrades run daily at 04:30, but only after a successful
-  Restic backup. If the backup fails, the upgrade is skipped.
-- **Versions:** every image is pinned to an exact version, and its
-  `wud.tag.include` label keeps WUD to real releases of that image (no
-  `-rc`, `.dev` or variant tags). To update, change the tag in the compose
-  file, commit, pull on main and `up -d` that stack. Read the release notes
-  for a major bump: Postgres can't open an older major's data (dump/restore),
-  Seafile majors change configuration.
-
-### Daily schedule
-
-```text
-03:00  Restic backup
-04:30  NixOS upgrade (only if backup succeeded)
-```
-
-### Manually updating a container
-
-After WUD shows an update is available, bump the tag in
-`hosts/main/compose/<service>.yml`, commit and push, then on main:
+WUD reports a new version on `home-updates`. Change the tag in
+`compose/<service>.yml`, commit and push. Then, on main:
 
 ```bash
 cd ~/server_config && git pull --ff-only && cd hosts/main
@@ -446,28 +32,72 @@ docker compose --env-file .env -f compose/<service>.yml pull
 docker compose --env-file .env -f compose/<service>.yml up -d
 ```
 
-Never add `--remove-orphans` or run `down` here: every stack shares the
-Compose project `compose`, so the other stacks would count as orphans.
+Never run `down` or add `--remove-orphans`: all stacks share the Compose
+project `compose`, so the other stacks count as orphans.
 
-### Rolling back NixOS
+Read the release notes before a major version. Postgres cannot open the data
+of an older major (dump and restore). Seafile majors change the configuration.
 
-If an upgrade causes issues, boot into a previous generation from the
-bootloader, or run:
+## Backups
 
 ```bash
-sudo nixos-rebuild switch --rollback
+systemctl list-timers 'restic-backups-*'
+sudo systemctl start restic-backups-<job>.service
+sudo journalctl -u restic-backups-<job>.service
 ```
 
----
+The jobs are `docker-volumes`, `seafile-data`, `adguard-state` and
+`tsidp-state`. Retention is 7 daily, 4 weekly and 6 monthly snapshots.
 
-## 13. Replacing a disk
+## Alerts
 
-Each disk holds an ESP (`/boot1..4`), a member of the mdadm `os` array (`/`) and a member of the btrfs RAID 1 (`/mnt/data`). One dead disk:
+All alerts go to ntfy at `https://ntfy.DOMAIN`. There is no login: the server
+is reachable from the tailnet only. Subscribe the phone to these topics:
 
-- `/` keeps running degraded; `mdadm` alerts on `home-smart`.
-- `/mnt/data` keeps running degraded until the next reboot. After a reboot it does **not** mount (no `degraded` option on purpose), Docker and the backups stay down, `btrfs-data-check` alerts on `home-smart`, and SSH + Tailscale are still up.
+| Topic | Source |
+|---|---|
+| `home-backup` | restic: success (silent), failure, monthly check |
+| `home-smart` | smartd on both hosts, mdadm, `btrfs-data-check`, Prometheus disk rules |
+| `home-updates` | WUD |
+| `home-infra` | Prometheus rules, `tailscale-healthcheck` on both hosts, and the Pi's upgrade, mount and drive checks |
 
-Replace it (the new disk in the same bay; `sdX` = the new disk, `N` = its bay number + 1):
+Local services post to `http://127.0.0.1:8085`. The Pi reads the base URL
+from its `/etc/ntfy/url`.
+
+## DNS (AdGuard Home)
+
+- **Tailnet devices:** in the Tailscale admin console, under DNS, set the
+  global nameserver to the address from `tailscale ip -4` on main.
+- **LAN devices:** let the router's DHCP give out main's LAN address as DNS.
+
+Check with `dig doubleclick.net @<main-ip>`: the answer is `0.0.0.0`. If a
+site breaks, the AdGuard query log shows the blocked name.
+
+## sudo rejects the password
+
+`users.mutableUsers` is on, so `operator-password.age` applies only when the
+account is created. If `passwd -S operator` shows `L`, set the password once
+from the secret (operator is in the `docker` group):
+
+```bash
+docker run --rm --privileged --pid=host alpine:3 nsenter -t 1 -m -u -i -n \
+  /run/current-system/sw/bin/sh -c 'export PATH=/run/current-system/sw/bin;
+  usermod -p "$(cat /run/agenix/operator-password)" operator'
+```
+
+Change it later with `passwd`.
+
+## Replacing a disk
+
+With one dead disk:
+
+- `/` continues degraded, and mdadm alerts on `home-smart`.
+- `/mnt/data` continues degraded until the next reboot. After a reboot it
+  does not mount, so Docker and the backups stay down. SSH and Tailscale
+  still work.
+
+Put the new disk in the same bay. `sdX` is the new disk and `N` is its bay
+number plus 1:
 
 ```bash
 # 1. If /mnt/data is not mounted, mount it degraded for the rebuild
@@ -485,9 +115,10 @@ sudo mdadm /dev/md/os --add /dev/disk/by-partlabel/osN
 
 # 5. Data array (devid of the missing disk: `btrfs filesystem show /mnt/data`)
 sudo btrfs replace start -B <missing-devid> /dev/disk/by-partlabel/dataN /mnt/data
-sudo btrfs balance start -dconvert=raid1,soft -mconvert=raid1c3,soft /mnt/data  # fold back any single-copy chunks written while degraded
+# Fold back the single-copy chunks written while degraded
+sudo btrfs balance start -dconvert=raid1,soft -mconvert=raid1c3,soft /mnt/data
 
-# 6. Update diskIds in hosts/main/disko.nix to the new by-id path, commit, rebuild
-#    (reinstalls GRUB onto the new ESP)
+# 6. Put the new by-id path into diskIds in disko.nix, commit, and rebuild.
+#    The rebuild installs GRUB on the new ESP.
 sudo nixos-rebuild switch --flake .#main
 ```

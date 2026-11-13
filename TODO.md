@@ -50,10 +50,8 @@
 - [ ] Snapshot tooling (snapper / btrbk) — none yet, so the subvolume splits give no rollback protection. Add `@nix` and `@docker` subvolumes together with it.
 - [ ] Autostart `blueman-applet` — it does not run in the session, and `blueman-manager` can pair but not connect without it as the BlueZ agent.
 - [ ] agenix on the workstation — `secrets/secrets.nix` reads `/etc/nixos/main-host-key.pub`, which does not exist here, so every `agenix` command fails to evaluate (raw `age -d -i <key>` works). Fetch it: `ssh operator@homeserver 'cat /etc/ssh/ssh_host_ed25519_key.pub'`.
-- [ ] aarch64 emulation — DEPLOY.md section 4 builds the Pi closure on the workstation, but the NixOS workstation has no `boot.binfmt.emulatedSystems = [ "aarch64-linux" ]`.
-- [ ] Install docs — DEPLOY.md has no workstation section (path: disko + `nixos-install --flake .#workstation`, like the Pi flash in section 4.1), and there is no `hosts/workstation/README.md`.
-- [ ] DEPLOY.md section 2.5 runs `nix flake lock` without `--extra-experimental-features 'nix-command flakes'`; Arch's nix.conf does not enable flakes, so the step fails on a fresh workstation.
-- [x] `site` input — checked 2026-11-08: the backup host evaluates without `/etc/nixos/site.nix` (Nix only fetches the input when read). Workstation and main must keep identical copies, since `flake.lock` pins the hash.
+- [ ] aarch64 emulation — DEPLOY.md section 4 builds the Pi closure on the workstation, but the workstation config has no `boot.binfmt.emulatedSystems = [ "aarch64-linux" ]`.
+- [ ] Install docs — DEPLOY.md has no workstation section (path: disko + `nixos-install --flake .#workstation`, like the Pi flash in section 4), and there is no `hosts/workstation/README.md`.
 - [ ] Decide whether the workstation imports `modules/alerts.nix` (smartd -> ntfy for its NVMe).
 - [ ] Revisit `hyprpolkitagent` in place of `polkit_gnome` once nixpkgs ships a tagged hyprtoolkit-based release — 0.1.3 breaks the fingerprint flow (hyprpolkitagent#24).
 
@@ -61,11 +59,8 @@
 
 Main hardware (Dell R720), in this order:
 
-- [x] (done 2026-11-08: iDRAC + Lifecycle Controller on 2.65.65.65 via `racadm update` from an SMB share; host kept running, fan response still Disabled, racadm over SSH unchanged) Update iDRAC7 firmware from 2.52.52.52 to 2.65.65.65 (Dell driver ID 0GHF4, "iDRAC with Lifecycle Controller", March 2020; the last release, iDRAC7 left maintenance in Feb 2020). Fixes CVE-2020-5344 (unauthenticated remote buffer overflow), CVE-2018-15774, CVE-2019-3764, CVE-2019-3705, the OpenSSH and SACK Panic CVEs, and drops static-key ciphers. Do it separately from the main reinstall. Only the iDRAC restarts; the Lifecycle Controller comes in the same package. The RED007 signature error only hits updates from 2.30.30.30 or older, not 2.52. Afterwards re-check `ThirdPartyPCIFanResponse` (must stay disabled for the IT-mode card) and that racadm over SSH still connects (host key and ciphers may change). Custom firmware is not an option: OpenBMC has no iDRAC7 port, and the only modified image (Fohdeesha/idrac-7-8-reverse-engineering) is a root PoC on Dell 2.60 that needs serial access to flash. BIOS 2.9.0 is already current.
-- [x] Cross-flash the PERC H710P Mini to IT mode (LSI SAS2308) — follow the Fohdeesha guide for the H710P Mini. Note the controller's SAS address before wiping it. The flash leaves the card without a boot ROM, so also flash the UEFI one (`flashboot /root/Bootloaders/x64sas2.rom`); without it the R720's UEFI cannot see the disks and can't boot from them. Afterwards disable `ThirdPartyPCIFanResponse` (fans otherwise stick at ~30%) and set the boot mode back to UEFI. Full procedure: `plan.md` (untracked).
-- [x] Boot an installer, check that all four disks show up as plain disks with SMART (`smartctl -a /dev/sdX`), and put their `/dev/disk/by-id/` paths into `diskIds` in `hosts/main/disko.nix`.
 - [ ] Set the iDRAC time zone to Europe/Brussels (it is on UTC-06:00).
-- [ ] Test the disk failure path once, before real data: pull one disk with the server running, reboot, check that `/` comes up, `/mnt/data` stays unmounted and the `home-smart` alerts arrive, then follow `hosts/main/README.md` §13 to rebuild.
+- [ ] Test the disk failure path once, before real data: pull one disk with the server running, reboot, check that `/` comes up, `/mnt/data` stays unmounted and the `home-smart` alerts arrive, then follow "Replacing a disk" in `hosts/main/README.md` to rebuild.
 - [ ] Replace DIMM_B2 (4G Samsung M393B5170FHD-CH9): the iDRAC event log has uncorrectable (multi-bit) ECC errors on it in 2025-08 and 2025-10. Or pull B2 + B3 and run on 24G.
 - [ ] Apply the config that's in git: main still runs the first install, with no sudo and an expired Tailscale key. Reinstall in mount mode (no wipe) via the installer ISO — steps in `plan.md` (untracked).
 - [ ] Untie `nixos-upgrade` from the restic jobs until the Pi works, or main never upgrades and alerts every night.

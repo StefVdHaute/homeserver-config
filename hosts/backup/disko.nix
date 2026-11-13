@@ -1,5 +1,5 @@
 # Disk layout for `backupserver` (Raspberry Pi 4), OS disk only. Flash flow
-# is DEPLOY.md §4.
+# is DEPLOY.md section 4.
 #
 # 240GB SATA SSD in a USB adapter, EEPROM USB boot (bootloader ≥ 2020-10-28
 # for GPT):
