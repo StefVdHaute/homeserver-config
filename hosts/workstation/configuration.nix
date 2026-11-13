@@ -60,17 +60,6 @@ let
     '';
   };
 
-  # Pi installs its settings.json packages with npm, which nixpkgs' wrapper
-  # leaves off PATH.
-  piCodingAgent = pkgs.symlinkJoin {
-    name = "pi-coding-agent-with-npm";
-    paths = [ pkgs.pi-coding-agent ];
-    nativeBuildInputs = [ pkgs.makeWrapper ];
-    postBuild = ''
-      wrapProgram $out/bin/pi --suffix PATH : ${lib.makeBinPath [ pkgs.nodejs ]}
-    '';
-  };
-
   gnomeKeyringUnlock = pkgs.writers.writePython3 "gnome-keyring-unlock" { }
     (builtins.readFile ./gnome-keyring-unlock.py);
 in
@@ -491,7 +480,6 @@ in
     # Development
     cmake
     claude-code
-    piCodingAgent      # pi; config is the Stow-managed ~/.pi/agent
     glab               # forge-status (the bar's code review): `glab auth login`
     gh                 # forge-status: `gh auth login`
     jetbrains.clion
