@@ -192,6 +192,8 @@
     btrfs-progs
     smartmontools
     docker-compose
+    raspberrypi-eeprom   # rpi-eeprom-config, rpi-eeprom-update
+    libraspberrypi       # vcgencmd
   ];
 
   # ============================================================
