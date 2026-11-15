@@ -1,4 +1,15 @@
 services:
+  # One-shot: Docker makes the slskd_app volume as root, and slskd runs as
+  # operator:users.
+  slskd-init:
+    image: slskd/slskd:0.26.2
+    container_name: slskd-init
+    restart: "no"
+    user: root
+    entrypoint: ["chown", "1000:100", "/app"]
+    volumes:
+      - slskd_app:/app
+
   slskd:
     image: slskd/slskd:0.26.2
     container_name: slskd
@@ -27,6 +38,9 @@ services:
     # connections only. The image has its own healthcheck.
     networks:
       - proxy
+    depends_on:
+      slskd-init:
+        condition: service_completed_successfully
 
 volumes:
   slskd_app:
