@@ -1,4 +1,15 @@
 services:
+  # One-shot: Docker makes the soularr_data volume as root, and Soularr runs
+  # as operator:users.
+  soularr-init:
+    image: mrusse08/soularr:v1.2.3
+    container_name: soularr-init
+    restart: "no"
+    user: root
+    entrypoint: ["chown", "-R", "1000:100", "/data"]
+    volumes:
+      - soularr_data:/data
+
   # Reads the wanted albums from Lidarr, downloads them through slskd, and
   # tells Lidarr to import them.
   soularr:
@@ -7,9 +18,11 @@ services:
     labels:
       - wud.tag.include=^v\d+\.\d+\.\d+$$
     restart: unless-stopped
+    # operator:users, as Lidarr and slskd: Soularr renames the download
+    # folders, and Lidarr must be able to move the files out of them.
+    user: "1000:100"
     volumes:
-      # State and log. Runs as root to write here; it only renames the
-      # download folders, so their owner stays operator:users.
+      # State and log.
       - soularr_data:/data
       # Soularr expands the $$VARIABLES in it from the environment below.
       - ../soularr.ini:/data/config.ini:ro
@@ -24,6 +37,9 @@ services:
       - WEBUI_ENABLED=false
     networks:
       - proxy
+    depends_on:
+      soularr-init:
+        condition: service_completed_successfully
 
 volumes:
   soularr_data:
