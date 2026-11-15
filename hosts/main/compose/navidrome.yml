@@ -1,0 +1,28 @@
+services:
+  navidrome:
+    image: deluan/navidrome:0.64.2
+    container_name: navidrome
+    labels:
+      - wud.tag.include=^\d+\.\d+\.\d+$$
+    restart: unless-stopped
+    volumes:
+      - navidrome_data:/data
+      # The library that Lidarr fills (compose/lidarr.yml).
+      - /mnt/data/music/library:/music:ro
+    environment:
+      - TZ=${TZ}
+    networks:
+      - proxy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:4533/ping || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  navidrome_data:
+
+networks:
+  proxy:
+    external: true

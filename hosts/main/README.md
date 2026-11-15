@@ -6,9 +6,9 @@ First install: [`DEPLOY.md`](../../DEPLOY.md). Loss and rollback:
 ## Services
 
 `https://home.DOMAIN` links to all of them: `seafile`, `vaultwarden`,
-`joplin`, `homeassistant`, `portainer`, `wud`, `ntfy`, `grafana` and `adguard`,
-each at `<name>.DOMAIN`. tsidp is its own tailnet device at
-`https://idp.<tailnet>.ts.net`.
+`joplin`, `homeassistant`, `navidrome`, `lidarr`, `slskd`, `portainer`, `wud`,
+`ntfy`, `grafana` and `adguard`, each at `<name>.DOMAIN`. tsidp is its own
+tailnet device at `https://idp.<tailnet>.ts.net`.
 
 Each app with "Sign in with Tailscale" keeps a local admin login as a
 fallback. Joplin's admin is `admin@localhost` with `JOPLIN_ADMIN_PASSWORD`.

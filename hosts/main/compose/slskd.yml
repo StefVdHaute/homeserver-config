@@ -1,0 +1,36 @@
+services:
+  slskd:
+    image: slskd/slskd:0.26.2
+    container_name: slskd
+    labels:
+      - wud.tag.include=^\d+\.\d+\.\d+$$
+    restart: unless-stopped
+    # operator:users, the owner of /mnt/data/music.
+    user: "1000:100"
+    volumes:
+      - slskd_app:/app
+      - /mnt/data/music:/music
+    environment:
+      - TZ=${TZ}
+      - SLSKD_REMOTE_CONFIGURATION=true
+      # Web UI login.
+      - SLSKD_USERNAME=admin
+      - SLSKD_PASSWORD=${SLSKD_WEB_PASSWORD}
+      # Administrator API key for Soularr (compose/soularr.yml).
+      - SLSKD_API_KEY=${SLSKD_API_KEY}
+      # Soulseek account; the network creates it on the first login.
+      - SLSKD_SLSK_USERNAME=${SLSKD_SOULSEEK_USERNAME}
+      - SLSKD_SLSK_PASSWORD=${SLSKD_SOULSEEK_PASSWORD}
+      - SLSKD_DOWNLOADS_DIR=/music/downloads
+      - SLSKD_INCOMPLETE_DIR=/music/incomplete
+    # The Soulseek listen port (50300) is not published: slskd makes outgoing
+    # connections only. The image has its own healthcheck.
+    networks:
+      - proxy
+
+volumes:
+  slskd_app:
+
+networks:
+  proxy:
+    external: true

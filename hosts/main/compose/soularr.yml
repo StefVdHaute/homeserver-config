@@ -1,0 +1,33 @@
+services:
+  # Reads the wanted albums from Lidarr, downloads them through slskd, and
+  # tells Lidarr to import them.
+  soularr:
+    image: mrusse08/soularr:v1.2.3
+    container_name: soularr
+    labels:
+      - wud.tag.include=^v\d+\.\d+\.\d+$$
+    restart: unless-stopped
+    volumes:
+      # State and log. Runs as root to write here; it only renames the
+      # download folders, so their owner stays operator:users.
+      - soularr_data:/data
+      # Soularr expands the $$VARIABLES in it from the environment below.
+      - ../soularr.ini:/data/config.ini:ro
+      - /mnt/data/music:/music
+    environment:
+      - TZ=${TZ}
+      - LIDARR_API_KEY=${LIDARR_API_KEY}
+      - SLSKD_API_KEY=${SLSKD_API_KEY}
+      # Seconds between two runs.
+      - SCRIPT_INTERVAL=300
+      # The web UI has no login and shows the configuration.
+      - WEBUI_ENABLED=false
+    networks:
+      - proxy
+
+volumes:
+  soularr_data:
+
+networks:
+  proxy:
+    external: true

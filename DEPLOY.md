@@ -191,7 +191,7 @@ docker network create -o com.docker.network.bridge.name=br-proxy proxy
 docker compose --env-file .env -f compose/caddy.yml up -d
 sudo nixos-rebuild switch --flake ~/server_config#main
 
-for svc in seafile vaultwarden joplin portainer ntfy wud homeassistant; do
+for svc in seafile vaultwarden joplin portainer ntfy wud homeassistant navidrome lidarr slskd soularr; do
   docker compose --env-file .env -f compose/$svc.yml up -d
 done
 ```

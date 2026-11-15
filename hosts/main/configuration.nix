@@ -98,6 +98,8 @@ in
   systemd.tmpfiles.rules = [
     "d /mnt/data/seafile 0750 operator users - -"
     "d /mnt/data/backups 0750 operator users - -"
+    "d /mnt/data/music 0750 operator users - -"
+    "d /mnt/data/music/library 0750 operator users - -"
   ];
 
   # ============================================================

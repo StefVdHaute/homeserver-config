@@ -56,6 +56,27 @@ joplin.{$DOMAIN} {
 	reverse_proxy joplin:22300
 }
 
+# Navidrome (music streaming; the phone apps use the Subsonic API)
+navidrome.{$DOMAIN} {
+	import acme_tls
+	import secure_headers
+	reverse_proxy navidrome:4533
+}
+
+# Lidarr (music library manager)
+lidarr.{$DOMAIN} {
+	import acme_tls
+	import secure_headers
+	reverse_proxy lidarr:8686
+}
+
+# slskd (Soulseek client)
+slskd.{$DOMAIN} {
+	import acme_tls
+	import secure_headers
+	reverse_proxy slskd:5030
+}
+
 # Portainer (HTTP over the private Docker `proxy` network)
 portainer.{$DOMAIN} {
 	import acme_tls
