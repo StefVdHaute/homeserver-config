@@ -105,8 +105,7 @@ in
   # Never let Docker or the backups run on the empty /mnt/data directory of
   # the OS array.
   systemd.services.docker.unitConfig.RequiresMountsFor = [ "/mnt/data" ];
-  systemd.services.restic-backups-docker-volumes.unitConfig.RequiresMountsFor = [ "/mnt/data" ];
-  systemd.services.restic-backups-seafile-data.unitConfig.RequiresMountsFor = [ "/mnt/data" ];
+  systemd.services.restic-backups-main.unitConfig.RequiresMountsFor = [ "/mnt/data" ];
 
   # Monthly scrub. On / (mdadm) it can only report bad data; on /mnt/data
   # (btrfs RAID 1) it repairs it from the good copy.

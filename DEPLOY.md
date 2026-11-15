@@ -225,10 +225,8 @@ done
 
 docker logs joplin-init                   # "admin password rotated"
 
-# First backups. The first one can take an hour.
-for job in docker-volumes seafile-data adguard-state tsidp-state; do
-  sudo systemctl start restic-backups-$job.service
-done
+# First backup. It can take an hour.
+sudo systemctl start restic-backups-main.service
 ssh operator@backupserver.<tailnet>.ts.net ls /mnt/backups/homeserver/snapshots
 
 sudo systemctl start tailscale-healthcheck.service     # on both hosts; must exit 0

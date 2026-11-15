@@ -14,7 +14,7 @@
 # State in /var/lib/private/tsidp (DynamicUser; /var/lib/tsidp is a
 # symlink): the tsnet node identity (tailscaled.state), its cert, the OIDC
 # signing key and the registered clients (oidc-funnel-clients.json).
-# Backed up by the restic job tsidp-state. No auth key in the config: the
+# Backed up by the restic job (configuration.nix). No auth key in the config: the
 # registration key is single-use. If the state is lost and can't be
 # restored, set services.tsidp.environmentFile once to a root-only file
 # holding TS_AUTH_KEY=<new key with tag:tsidp>, and delete the old offline

@@ -17,9 +17,9 @@ fallback. Joplin's admin is `admin@localhost` with `JOPLIN_ADMIN_PASSWORD`.
 
 | Time | Job |
 |---|---|
-| 03:00 | The four restic jobs (`restic-backups-*.timer`) |
-| 04:30 | `nixos-upgrade`, only after `docker-volumes` and `seafile-data` succeed |
-| Monthly | `restic-check-deep`: reads 10% of the repository |
+| 03:00 | The restic job (`restic-backups-main.timer`) |
+| 04:30 | `nixos-upgrade`, only after the restic job succeeds |
+| 1st of the month, 12:00 | `restic-check-deep`: reads 10% of the repository |
 
 ## Update a container
 
@@ -41,13 +41,13 @@ of an older major (dump and restore). Seafile majors change the configuration.
 ## Backups
 
 ```bash
-systemctl list-timers 'restic-backups-*'
-sudo systemctl start restic-backups-<job>.service
-sudo journalctl -u restic-backups-<job>.service
+systemctl list-timers restic-backups-main
+sudo systemctl start restic-backups-main.service
+sudo journalctl -u restic-backups-main.service
 ```
 
-The jobs are `docker-volumes`, `seafile-data`, `adguard-state` and
-`tsidp-state`. Retention is 7 daily, 4 weekly and 6 monthly snapshots.
+One snapshot holds the Docker volumes, the Seafile data and the AdGuard Home
+and tsidp state. Retention is 7 daily, 4 weekly and 6 monthly snapshots.
 
 ## Alerts
 

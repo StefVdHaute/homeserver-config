@@ -5,34 +5,6 @@ let
   #   { acmeDomain = "home.dedyn.io"; acmeEmail = "you@example.com";
   #     tailnet = "example-tailnet.ts.net"; }
   site = siteConfig;
-
-  # Shared options for every restic backup job.
-  # RESTIC_REPOSITORY + RESTIC_PASSWORD come from secrets/restic.env.age.
-  resticCommon = {
-    environmentFile = config.age.secrets.restic-env.path;
-    initialize = true;
-    timerConfig = {
-      OnCalendar = "03:00";
-      Persistent = true;
-      RandomizedDelaySec = "30m";
-    };
-    pruneOpts = [
-      "--keep-daily 7"
-      "--keep-weekly 4"
-      "--keep-monthly 6"
-    ];
-    checkOpts = [ ];   # empty = structural check every run, no --read-data
-    extraBackupArgs = [ "--compression" "max" ];
-  };
-
-  # backupCleanupCommand runs as ExecStopPost, i.e. after failures too;
-  # only ping "Backup OK" when the unit actually succeeded (failures get
-  # their own alert via OnFailure).
-  okOnSuccess = job: ''
-    if [ "$SERVICE_RESULT" = success ]; then
-      ${ntfyNotify} home-backup 1 'Backup OK' '${job} snapshot completed'
-    fi
-  '';
 in
 
 {
@@ -238,36 +210,47 @@ in
   # Backups (restic → backupserver over SFTP/Tailscale)
   # Silent success ping + audible failure ping go to ntfy /home-backup.
   # ============================================================
-  services.restic.backups = {
-    docker-volumes = resticCommon // {
-      paths = [ "/mnt/data/docker/volumes" ];
-      exclude = [ "*.tmp" "*.log" ];
-      extraBackupArgs = resticCommon.extraBackupArgs ++ [ "--tag" "docker-volumes" ];
-      backupCleanupCommand = okOnSuccess "docker-volumes";
+  # RESTIC_REPOSITORY + RESTIC_PASSWORD come from secrets/restic.env.age.
+  services.restic.backups.main = {
+    environmentFile = config.age.secrets.restic-env.path;
+    initialize = true;
+    timerConfig = {
+      OnCalendar = "03:00";
+      Persistent = true;
+      RandomizedDelaySec = "30m";
     };
-    seafile-data = resticCommon // {
-      paths = [ "/mnt/data/seafile" ];
-      extraBackupArgs = resticCommon.extraBackupArgs ++ [ "--tag" "seafile-data" ];
-      backupCleanupCommand = okOnSuccess "seafile-data";
-    };
-    # DynamicUser services keep their state in /var/lib/private/<name>;
-    # /var/lib/<name> is only a symlink, and restic stores a symlink as a
-    # symlink, so back up the real path. After a restore systemd re-owns the
-    # files to the service's dynamic UID on its next start.
-    adguard-state = resticCommon // {
-      paths = [ "/var/lib/private/AdGuardHome" ];
-      extraBackupArgs = resticCommon.extraBackupArgs ++ [ "--tag" "adguard-state" ];
-      backupCleanupCommand = okOnSuccess "adguard-state";
-    };
-    # tsidp's node identity, OIDC signing key and registered clients
-    # (hosts/main/tsidp.nix). Without it a rebuild needs a new auth key and
-    # every app's OIDC client re-registered.
-    tsidp-state = resticCommon // {
-      paths = [ "/var/lib/private/tsidp" ];
-      exclude = [ "tailscaled.log*.txt" ];
-      extraBackupArgs = resticCommon.extraBackupArgs ++ [ "--tag" "tsidp-state" ];
-      backupCleanupCommand = okOnSuccess "tsidp-state";
-    };
+    pruneOpts = [
+      "--keep-daily 7"
+      "--keep-weekly 4"
+      "--keep-monthly 6"
+    ];
+    paths = [
+      "/mnt/data/docker/volumes"
+      "/mnt/data/seafile"
+      # DynamicUser services keep their state in /var/lib/private/<name>;
+      # /var/lib/<name> is only a symlink, and restic stores a symlink as a
+      # symlink, so back up the real path. After a restore systemd re-owns the
+      # files to the service's dynamic UID on its next start.
+      "/var/lib/private/AdGuardHome"
+      # tsidp's node identity, OIDC signing key and registered clients
+      # (hosts/main/tsidp.nix). Without it a rebuild needs a new auth key and
+      # every app's OIDC client re-registered.
+      "/var/lib/private/tsidp"
+    ];
+    exclude = [
+      "/mnt/data/docker/volumes/**/*.tmp"
+      "/mnt/data/docker/volumes/**/*.log"
+      "/var/lib/private/tsidp/tailscaled.log*.txt"
+    ];
+    extraBackupArgs = [ "--compression" "max" ];
+    # backupCleanupCommand runs as ExecStopPost, i.e. after failures too;
+    # only ping "Backup OK" when the unit actually succeeded (failures get
+    # their own alert via OnFailure).
+    backupCleanupCommand = ''
+      if [ "$SERVICE_RESULT" = success ]; then
+        ${ntfyNotify} home-backup 1 'Backup OK' 'Snapshot completed'
+      fi
+    '';
   };
 
   # Pin the Pi's SSH host key so restic's SFTP connection (a non-interactive
@@ -280,14 +263,8 @@ in
   };
 
   # Failure notifier from modules/alerts.nix.
-  systemd.services.restic-backups-docker-volumes.unitConfig.OnFailure =
-    [ "ntfy-backup-failure@restic-backups-docker-volumes.service" ];
-  systemd.services.restic-backups-seafile-data.unitConfig.OnFailure =
-    [ "ntfy-backup-failure@restic-backups-seafile-data.service" ];
-  systemd.services.restic-backups-adguard-state.unitConfig.OnFailure =
-    [ "ntfy-backup-failure@restic-backups-adguard-state.service" ];
-  systemd.services.restic-backups-tsidp-state.unitConfig.OnFailure =
-    [ "ntfy-backup-failure@restic-backups-tsidp-state.service" ];
+  systemd.services.restic-backups-main.unitConfig.OnFailure =
+    [ "ntfy-backup-failure@restic-backups-main.service" ];
 
   # Monthly deep check: reads and verifies a 10% sample of pack data over
   # SFTP, covering the whole repo statistically over ~10 months.
@@ -297,7 +274,7 @@ in
     serviceConfig = {
       Type = "oneshot";
       EnvironmentFile = config.age.secrets.restic-env.path;
-      ExecStart = "${pkgs.restic}/bin/restic check --read-data-subset=10%";
+      ExecStart = "${pkgs.restic}/bin/restic check --retry-lock 1h --read-data-subset=10%";
       ExecStartPost = "${ntfyNotify} home-backup 1 'Backup check OK' 'Monthly deep restic check passed (10% subset)'";
       Nice = 19;
       IOSchedulingClass = "idle";
@@ -307,9 +284,8 @@ in
   systemd.timers.restic-check-deep = {
     wantedBy = [ "timers.target" ];
     timerConfig = {
-      OnCalendar = "monthly";        # first of every month
+      OnCalendar = "*-*-01 12:00";
       Persistent = true;
-      RandomizedDelaySec = "6h";     # clear of the 03:00 backup
     };
   };
 
@@ -324,16 +300,10 @@ in
     flags = [ "-L" ];
   };
 
-  # Upgrade only after both restic jobs succeed.
+  # Upgrade only after the restic job succeeds.
   systemd.services.nixos-upgrade = {
-    after = [
-      "restic-backups-docker-volumes.service"
-      "restic-backups-seafile-data.service"
-    ];
-    requires = [
-      "restic-backups-docker-volumes.service"
-      "restic-backups-seafile-data.service"
-    ];
+    after = [ "restic-backups-main.service" ];
+    requires = [ "restic-backups-main.service" ];
   };
 
   system.stateVersion = "26.05";
