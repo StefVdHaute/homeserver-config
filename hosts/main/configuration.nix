@@ -100,6 +100,8 @@ in
     "d /mnt/data/backups 0750 operator users - -"
     "d /mnt/data/music 0750 operator users - -"
     "d /mnt/data/music/library 0750 operator users - -"
+    "d /mnt/data/music/downloads 0750 operator users - -"
+    "d /mnt/data/music/incomplete 0750 operator users - -"
   ];
 
   # ============================================================
