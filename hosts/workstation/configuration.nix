@@ -342,6 +342,7 @@ in
 
   hardware.bluetooth.enable = true;
   services.blueman.enable = true;
+  hardware.xpadneo.enable = true;
 
   # The bar's mail widget: GOA holds the Google sign-in and keeps its tokens in
   # gnome-keyring, which the login PAM stack (included by sddm) unlocks.
