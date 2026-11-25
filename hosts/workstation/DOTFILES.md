@@ -37,4 +37,4 @@ Push the dotfiles, then here: `nix flake update dotfiles`, push, and `nixup`.
 | The udev rule on `BAT1/charge_control_end_threshold` | `battery-charge-limit` writes that node. |
 | Wayland flags in the `spotifyAdblocked` wrapper | `spotify-flags.conf` is read only by Arch's launcher. |
 
-Inert on this host: the dotfiles' `blueberry/`, `yay/` and `system/`.
+Inert on this host: the dotfiles' `yay/` and `system/`.
