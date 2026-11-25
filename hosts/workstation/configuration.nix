@@ -24,6 +24,15 @@ let
 
   blenderMcp = pkgs.callPackage ../../modules/blender-mcp/package.nix { };
 
+  # Wi-Fi power save off on AC, on on battery: power save on the MT7922 adds
+  # jitter in games.
+  wifiPowerSaveByAc = pkgs.writeShellScript "wifi-powersave-by-ac" ''
+    if [ "$(cat /sys/class/power_supply/ACAD/online)" = 1 ]; then ps=off; else ps=on; fi
+    for dev in /sys/class/net/*/wireless; do
+      ${pkgs.iw}/bin/iw dev "$(basename "$(dirname "$dev")")" set power_save "$ps"
+    done
+  '';
+
   # The plugin only reads .tap helpers from its own compiled-in LIBEXECDIR, so
   # xarchiver.tap is installed into the rebuilt plugin's $out.
   thunarArchivePluginWithXarchiver = pkgs.thunar-archive-plugin.overrideAttrs (old: {
@@ -379,9 +388,20 @@ in
 
   # Makes the battery charge-limit node writable by wheel, for the dotfiles'
   # battery-charge-limit script. The EC persists the value across reboots.
+  # The ACAD rule sets Wi-Fi power save from the AC state.
   services.udev.extraRules = ''
     SUBSYSTEM=="power_supply", KERNEL=="BAT1", ATTR{charge_control_end_threshold}!="", RUN+="${pkgs.coreutils}/bin/chgrp wheel /sys/class/power_supply/BAT1/charge_control_end_threshold", RUN+="${pkgs.coreutils}/bin/chmod g+w /sys/class/power_supply/BAT1/charge_control_end_threshold"
+    SUBSYSTEM=="power_supply", KERNEL=="ACAD", RUN+="${wifiPowerSaveByAc}"
   '';
+
+  # NetworkManager sets power save again on each connect, so the dispatcher
+  # applies the AC state after it.
+  networking.networkmanager.dispatcherScripts = [{
+    type = "basic";
+    source = pkgs.writeShellScript "wifi-powersave-dispatch" ''
+      [ "$2" = up ] && exec ${wifiPowerSaveByAc}
+    '';
+  }];
 
   services.printing = {
     enable = true;
